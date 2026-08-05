@@ -1,7 +1,7 @@
 /* Đổi VERSION mỗi lần deploy bản mới -> máy người dùng tự nhận ra */
-const VERSION = "1.4.0";
+const VERSION = "1.4.1";
 const CACHE = `qlx-${VERSION}`;
-const SHELL = ["./", "./index.html", "./firebase-config.js", "./manifest.json"];
+const SHELL = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", e => {
   // KHÔNG skipWaiting ở đây: chờ người dùng bấm "Cập nhật" mới đổi,
