@@ -1,8 +1,12 @@
-const CACHE = "qlx-v2";
-const SHELL = ["./", "./index.html", "./manifest.json"];
+/* Đổi VERSION mỗi lần deploy bản mới -> máy người dùng tự nhận ra */
+const VERSION = "1.4.0";
+const CACHE = `qlx-${VERSION}`;
+const SHELL = ["./", "./index.html", "./firebase-config.js", "./manifest.json"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // KHÔNG skipWaiting ở đây: chờ người dùng bấm "Cập nhật" mới đổi,
+  // tránh app tự đổi giữa lúc đang nhập liệu dở.
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
 });
 
 self.addEventListener("activate", e => {
@@ -11,6 +15,14 @@ self.addEventListener("activate", e => {
       .then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Trang gọi khi người dùng bấm "Cập nhật"
+self.addEventListener("message", e => {
+  if (e.data && e.data.type === "SKIP_WAITING") self.skipWaiting();
+  if (e.data && e.data.type === "GET_VERSION" && e.source) {
+    e.source.postMessage({ type: "VERSION", version: VERSION });
+  }
 });
 
 // Bấm vào thông báo thì mở app (hoặc nhảy về tab đang mở sẵn)
