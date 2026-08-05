@@ -18,10 +18,23 @@ Vài phút sau app chạy ở `https://<user>.github.io/quanlyxe/`.
 
 ## 2. Nối Firebase
 
-Firebase Console → Project Settings → Your apps → Web app → copy `firebaseConfig`,
-dán đè vào biến `FIREBASE_CONFIG` ở đầu `<script>` trong `index.html`.
+Config nằm ở file riêng **`firebase-config.js`** — sửa ở đó, KHÔNG sửa trong `index.html`.
 
-Chưa dán thì app chạy **dữ liệu mẫu** để xem giao diện — không lưu gì cả.
+```js
+window.FIREBASE_CONFIG = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};
+```
+
+Lấy giá trị ở: Firebase Console → Project settings → Your apps → SDK setup and configuration → **Config**.
+
+Nhờ tách file này mà mỗi lần cập nhật `index.html` không bị mất config.
+Thiếu file thì app tự chạy **dữ liệu mẫu**, không lưu gì cả.
 
 Thêm domain `<user>.github.io` vào **Authentication → Settings → Authorized domains**.
 
@@ -133,6 +146,35 @@ Trường `khuVuc` dùng ở 3 chỗ:
 - Hàng chip lọc trên đầu danh sách (chỉ hiện khi có từ 2 khu vực trở lên)
 - Dòng mô tả trên thẻ xe và màn chi tiết
 Ô nhập có gợi ý các khu vực đã dùng, gõ tên mới cũng được.
+
+## 10. Cập nhật phiên bản
+
+Version hiện ra ở thanh tiêu đề (`1 xe trong đội · v1.4.0`) để biết máy đang chạy bản nào.
+
+**Mỗi lần deploy bản mới, phải đổi version ở CẢ HAI file:**
+
+- `index.html` → `const APP_VERSION = "1.4.0"`
+- `sw.js` → `const VERSION = "1.4.0"`
+
+Có sẵn script làm nhanh:
+
+```bash
+./bump.sh 1.5.0
+```
+
+**Cơ chế chạy thế nào**
+
+1. App kiểm tra bản mới **mỗi 30 phút** và **mỗi lần mở lại từ nền**
+2. Thấy `sw.js` khác đi → tải ngầm bản mới, không làm phiền
+3. Tải xong → hiện thanh đen dưới màn hình: *"Đã có bản mới"* + nút **Cập nhật** / **Để sau**
+4. Bấm Cập nhật → service worker mới nắm quyền → trang tự nạp lại
+
+Cố tình **không tự động đổi ngay** để tránh app nhảy version giữa lúc đang nhập liệu dở.
+Bấm "Để sau" thì lần mở app tiếp theo sẽ hỏi lại.
+
+**Không đổi version thì sao?** Máy người dùng vẫn chạy bản cũ, vì trình duyệt chỉ coi là
+có bản mới khi nội dung `sw.js` thay đổi. Đây là lỗi hay gặp nhất — sửa `index.html` xong
+quên bump `sw.js`, rồi thắc mắc sao nhân viên không thấy tính năng mới.
 
 ## Ghi chú
 
