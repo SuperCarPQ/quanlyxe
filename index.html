@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14161A">
+<title>Quản lý xe</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --plate:#F7C948;
+  --plate-edge:#12141A;
+  --ink:#14161A;
+  --ink-2:#4A4F58;
+  --ink-3:#868D98;
+  --bg:#E9EBEC;
+  --card:#FFFFFF;
+  --line:#D5D8DC;
+  --ok:#1F8A4C;
+  --warn:#E0900B;
+  --bad:#D93B30;
+  --r:14px;
+  --pad:16px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --sidebar:0px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:'Be Vietnam Pro',system-ui,sans-serif;
+  font-size:15px;line-height:1.45;
+  padding-bottom:calc(72px + var(--safe-b));
+  overscroll-behavior-y:none;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:none;background:none}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+/* ---------- App bar ---------- */
+.bar{
+  position:sticky;top:0;z-index:40;
+  background:var(--ink);color:#fff;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) var(--pad) 12px;
+  display:flex;align-items:center;gap:10px;
+}
+.bar h1{
+  margin:0;font-family:'Oswald',sans-serif;font-weight:600;
+  font-size:17px;letter-spacing:.08em;text-transform:uppercase;flex:1;
+}
+.bar .sub{font-size:11px;color:#8D949E;letter-spacing:.04em;font-family:'Be Vietnam Pro',sans-serif;text-transform:none;display:block}
+.iconbtn{color:#fff;font-size:19px;padding:6px 9px;border-radius:9px;position:relative;line-height:1}
+.iconbtn:active{background:#2A2E36}
+.dot{
+  position:absolute;top:1px;right:1px;min-width:17px;height:17px;padding:0 4px;
+  background:var(--bad);color:#fff;border-radius:99px;
+  font-family:'Oswald',sans-serif;font-size:10.5px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;
+}
+
+/* ---------- Search ---------- */
+.search{padding:12px var(--pad) 4px;display:flex;gap:8px}
+.search input{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:15px}
+.chips{display:flex;gap:7px;overflow-x:auto;padding:10px var(--pad);scrollbar-width:none;flex-wrap:nowrap}
+.chips::-webkit-scrollbar{display:none}
+.chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);padding:6px 13px;border-radius:999px;font-size:13px;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+.chiplb{font-family:'Oswald',sans-serif;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);align-self:center;padding-right:3px;flex:0 0 auto}
+.drive{display:flex;align-items:center;gap:11px;padding:13px 14px;width:100%;text-align:left;border-bottom:1px solid var(--line)}
+.drive:last-child{border-bottom:none}
+.drive:hover{background:#F4F5F6}
+.drive .dic{width:34px;height:34px;border-radius:9px;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px;flex:0 0 auto}
+.drive .dtx{flex:1;min-width:0}
+.drive .dtx b{display:block;font-size:13.5px;font-weight:600}
+.drive .dtx span{display:block;font-size:11.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- Biển số ---------- */
+.plate{display:inline-flex;align-items:center;justify-content:center;background:var(--plate);border:2px solid var(--plate-edge);border-radius:6px;padding:5px 11px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18)}
+.plate span{font-family:'Oswald',sans-serif;font-weight:700;color:var(--plate-edge);letter-spacing:.05em;font-size:19px;line-height:1.1;white-space:nowrap}
+.plate.sm span{font-size:15px}
+.plate.lg span{font-size:26px}
+
+/* ---------- Tem ---------- */
+.tem{width:50px;height:50px;border-radius:50%;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;line-height:1;box-shadow:inset 0 0 0 2px rgba(255,255,255,.45)}
+.tem b{font-family:'Oswald',sans-serif;font-size:16px;font-weight:700}
+.tem i{font-style:normal;font-size:7.5px;letter-spacing:.05em;text-transform:uppercase;opacity:.92;margin-top:2px}
+.tem.ok{background:var(--ok)} .tem.warn{background:var(--warn)} .tem.bad{background:var(--bad)} .tem.none{background:var(--ink-3)}
+.tem.sm{width:38px;height:38px} .tem.sm b{font-size:13px} .tem.sm i{font-size:6.5px}
+
+/* ---------- Pills giấy tờ ---------- */
+.pills{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:3px 7px;border-radius:6px;letter-spacing:.03em}
+.pill.ok{background:#E4F3EA;color:#166B3B} .pill.warn{background:#FBF0D8;color:#8A5B06}
+.pill.bad{background:#FBE4E2;color:#96291F} .pill.none{background:#E9EBEC;color:#7A818B}
+
+/* ---------- Cards ---------- */
+.list{padding:4px var(--pad) 20px;display:flex;flex-direction:column;gap:11px}
+.card{background:var(--card);border-radius:var(--r);border:1px solid var(--line);overflow:hidden}
+.vcard{display:flex;gap:12px;padding:13px;align-items:center;width:100%;text-align:left}
+.vcard:hover{background:#F4F5F6}
+.vthumb{width:62px;height:62px;border-radius:10px;flex:0 0 auto;background:#DDE0E3 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-family:'Oswald',sans-serif;color:#9AA1AA;font-size:11px;letter-spacing:.06em}
+.vmain{flex:1;min-width:0}
+.vname{font-weight:600;font-size:15px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vmeta{font-size:12px;color:var(--ink-3);margin-top:1px}
+
+/* ---------- Detail ---------- */
+.hero{background:var(--ink);color:#fff;padding:18px var(--pad) 20px}
+.hero .row{display:flex;align-items:center;gap:14px}
+.hero .nm{font-size:19px;font-weight:600;margin-top:10px}
+.hero .mt{font-size:12.5px;color:#9AA1AA;margin-top:2px}
+.tabs{display:flex;background:var(--ink);padding:0 var(--pad);gap:22px;position:sticky;top:0;z-index:30}
+.tab{color:#8D949E;padding:13px 0 11px;font-size:13px;font-weight:500;border-bottom:2.5px solid transparent;letter-spacing:.02em}
+.tab[aria-selected="true"]{color:#fff;border-bottom-color:var(--plate)}
+
+.sec{padding:16px var(--pad) 8px}
+.sec h3{font-family:'Oswald',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 9px}
+.kv{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.kv .r{display:flex;justify-content:space-between;gap:14px;padding:11px 14px;border-bottom:1px solid var(--line)}
+.kv .r:last-child{border-bottom:none}
+.kv .k{color:var(--ink-2);font-size:13.5px;flex:0 0 auto}
+.kv .v{text-align:right;font-weight:500;font-size:14px;min-width:0;word-break:break-word}
+.kv .v.mono{font-family:'Roboto Mono',monospace;font-size:13px;font-weight:400}
+.kv .v.num{font-family:'Oswald',sans-serif;font-weight:600;font-size:15.5px}
+.v.pos{color:var(--ok)} .v.neg{color:var(--bad)} .v.wr{color:var(--warn)}
+
+/* ---------- Rows ---------- */
+.mrow{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.mrow:last-child{border-bottom:none}
+.mrow:hover{background:#F4F5F6}
+.mtag{font-family:'Oswald',sans-serif;font-size:12px;font-weight:600;letter-spacing:.06em;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 8px;color:var(--ink-2);flex:0 0 auto;text-align:center;line-height:1.15}
+.mtag b{display:block;font-size:15px;color:var(--ink)}
+
+/* ---------- Dashboard ---------- */
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.stat .lb{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-family:'Oswald',sans-serif}
+.stat .vl{font-family:'Oswald',sans-serif;font-size:25px;font-weight:600;margin-top:5px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+
+/* ---------- Form ---------- */
+.f{padding:14px var(--pad)}
+.fg{margin-bottom:13px}
+.fg label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:5px;font-weight:500}
+.fg input,.fg select,.fg textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:15px}
+.fg .hint{font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.fg textarea{resize:vertical;min-height:66px;font-family:inherit}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.fhead{font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:24px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+
+.btn{display:block;width:100%;background:var(--ink);color:#fff;border-radius:11px;padding:14px;font-weight:600;font-size:15px;text-align:center}
+.btn:hover{opacity:.88}
+.btn.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
+.btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+
+/* ---------- Photos ---------- */
+.ph{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.ph a{display:block;aspect-ratio:4/3;border-radius:11px;overflow:hidden;background:#DDE0E3;border:1px solid var(--line)}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .dead{display:flex;align-items:center;justify-content:center;height:100%;color:var(--ink-3);font-size:11.5px;text-align:center;padding:8px}
+
+/* ---------- Nav ---------- */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:var(--safe-b)}
+.nav .brand{display:none}
+.mark{height:19px;width:auto;flex:0 0 auto;display:block}
+.bar .mark{height:22px;margin-right:2px}
+.nav button{flex:1;padding:9px 0 8px;color:var(--ink-3);font-size:10.5px;letter-spacing:.03em;position:relative}
+.nav button .ic{display:block;font-size:19px;margin-bottom:1px}
+.nav button[aria-current="page"]{color:var(--ink);font-weight:600}
+
+.empty{text-align:center;padding:56px 28px;color:var(--ink-3)}
+.empty .ic{font-size:40px;opacity:.35}
+.empty p{margin:10px 0 18px;font-size:14px}
+.banner{border-radius:11px;padding:10px 13px;font-size:12.5px;margin:12px var(--pad) 0;background:#FFF6D9;border:1px solid #EFD98A;color:#6B5410}
+.banner.red{background:#FDE8E6;border-color:#F1B5AF;color:#8A2A22}
+.banner button{text-decoration:underline;font-weight:600;color:inherit}
+
+.sheet{position:fixed;inset:0;z-index:60;background:var(--bg);overflow-y:auto;padding-bottom:40px}
+
+/* =========================================================
+   DESKTOP  ≥900px
+   ========================================================= */
+@media (min-width:900px){
+  :root{--sidebar:224px;--pad:24px}
+  body{padding-bottom:0}
+  .nav{
+    top:0;bottom:0;right:auto;width:var(--sidebar);
+    flex-direction:column;align-items:stretch;
+    border-top:none;border-right:1px solid var(--line);
+    padding:20px 12px;gap:4px;
+  }
+  .nav .brand{
+    display:flex;align-items:center;gap:9px;
+    font-family:'Oswald',sans-serif;font-weight:600;
+    font-size:14px;letter-spacing:.1em;text-transform:uppercase;
+    padding:6px 12px 20px;color:var(--ink);
+  }
+  .nav button{
+    flex:0 0 auto;display:flex;align-items:center;gap:11px;
+    padding:11px 12px;border-radius:10px;font-size:14px;text-align:left;
+  }
+  .nav button .ic{margin:0;font-size:17px}
+  .nav button:hover{background:var(--bg)}
+  .nav button[aria-current="page"]{background:var(--ink);color:#fff}
+  #app{margin-left:var(--sidebar)}
+  .bar{padding:18px var(--pad) 16px}
+  .bar h1{font-size:19px}
+  .inner{max-width:1120px;margin:0 auto}
+  .list{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;padding:8px var(--pad) 32px;max-width:1120px;margin:0 auto}
+  .secs{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;align-items:start;max-width:1120px;margin:0 auto}
+  .secs .full{grid-column:1/-1}
+  .hero{padding:26px var(--pad) 28px}
+  .tabs{padding:0 var(--pad);gap:28px}
+  .grid2{grid-template-columns:repeat(4,1fr)}
+  .f{max-width:720px;margin:0 auto;padding:20px var(--pad) 40px}
+  .btn{max-width:320px}
+  .ph{grid-template-columns:repeat(3,1fr)}
+  .chips{flex-wrap:wrap;max-width:1120px;margin:0 auto}
+  .search{max-width:1120px;margin:0 auto}
+  .sheet{padding-left:var(--sidebar)}
+  .sheet .f{max-width:600px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<nav class="nav" id="nav">
+  <div class="brand"><svg class="mark" viewBox="0 0 34 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="1" width="32" height="14" rx="2.8" fill="#F7C948" stroke="#12141A" stroke-width="1.7"/><text x="17" y="11.9" text-anchor="middle" font-family="Oswald,Arial Narrow,sans-serif" font-weight="700" font-size="9.4" letter-spacing=".6" fill="#12141A">QLX</text></svg>Quản lý xe</div>
+  <button data-go="list" aria-current="page"><span class="ic">🚗</span>Tổng quan</button>
+  <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
+</nav>
+
+<script type="module">
+/* =========================================================
+   1. CẤU HÌNH FIREBASE — dán config của ông vào đây
+   ========================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "DAN_API_KEY_VAO_DAY",
+  authDomain: "xxx.firebaseapp.com",
+  projectId: "xxx",
+  storageBucket: "xxx.appspot.com",
+  messagingSenderId: "000000",
+  appId: "1:000000:web:xxxx"
+};
+
+const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
+
+/* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
+const LOGO = `<svg class="mark" viewBox="0 0 34 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="1" width="32" height="14" rx="2.8" fill="#F7C948" stroke="#12141A" stroke-width="1.7"/><text x="17" y="11.9" text-anchor="middle" font-family="Oswald,Arial Narrow,sans-serif" font-weight="700" font-size="9.4" letter-spacing=".6" fill="#12141A">QLX</text></svg>`;
+
+const LIVE = !FIREBASE_CONFIG.apiKey.startsWith("DAN_");
+let db = null, FS = null;
+
+if (LIVE) {
+  const [{ initializeApp }, fs] = await Promise.all([
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js")
+  ]);
+  const app = initializeApp(FIREBASE_CONFIG);
+  db = fs.initializeFirestore(app, {
+    localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
+  });
+  FS = fs;
+}
+
+/* =========================================================
+   2. GIẤY TỜ CÓ THỜI HẠN
+   ========================================================= */
+const DOCS = [
+  { key:"hetHanDangKiem", newKey:"dangKiemMoi",  label:"Đăng kiểm", tag:"ĐK" },
+  { key:"hetHanDinhVi",   newKey:"dinhViMoi",    label:"Định vị",   tag:"ĐV" },
+  { key:"hetHanPhuHieu",  newKey:"phuHieuMoi",   label:"Phù hiệu",  tag:"PH" }
+];
+
+/* =========================================================
+   3. DỮ LIỆU
+   ========================================================= */
+const DEMO = [
+  { id:"68A-123.45", soCho:7, loaiXe:"Ô tô 7 chỗ", hangXe:"Toyota",
+    namSX:2023, ngayMua:"2023-08-14", giaMua:850000000, vin:"MHFXX8EM1P1234567", soMay:"2ZR-9876543",
+    hetHanDangKiem:"2026-08-11", dangKiemMoi:"2025-08-11",
+    hetHanDinhVi:"2026-11-30", dinhViMoi:"2025-11-30", nhaMangDinhVi:"Viettel eTracking",
+    linkDinhVi:"https://etracking.viettel.vn/", 
+    hetHanPhuHieu:"2026-08-09", phuHieuMoi:"2025-08-09", soPhuHieu:"PH-68-004521",
+    ghiChuPhapLy:"Sang tên xong 9/2023", phuongThucMua:"Trả góp",
+    soTienVay:500000000, traTruoc:350000000,
+    khuVuc:"Phú Quốc", linkDrive:"",
+    hinhThuc:"Cho thuê tự lái", dungGiayTo:"Công ty TNHH", caVet:"Ngân hàng giữ", anh:[] },
+  { id:"68A-678.90", soCho:5, loaiXe:"Ô tô 4 chỗ", hangXe:"Kia",
+    namSX:2021, ngayMua:"2022-03-02", giaMua:390000000, vin:"KNABX512BMT765432", soMay:"G4LA-112233",
+    hetHanDangKiem:"2027-02-12", dangKiemMoi:"2026-02-12",
+    hetHanDinhVi:"2026-12-31", dinhViMoi:"2025-12-31", nhaMangDinhVi:"Bình Anh",
+    linkDinhVi:"", 
+    hetHanPhuHieu:"2027-01-20", phuHieuMoi:"2026-01-20", soPhuHieu:"PH-68-003310",
+    ghiChuPhapLy:"", phuongThucMua:"Trả thẳng",
+    soTienVay:0, traTruoc:390000000,
+    khuVuc:"Phú Quốc", linkDrive:"",
+    hinhThuc:"Cho thuê tự lái", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] },
+  { id:"68B-222.11", soCho:2, loaiXe:"Xe máy", hangXe:"Honda",
+    namSX:2024, ngayMua:"2024-05-19", giaMua:34000000, vin:"RLHJF6110RY000111", soMay:"JF61E-0009988",
+    hetHanDangKiem:"", dangKiemMoi:"", hetHanDinhVi:"", dinhViMoi:"", nhaMangDinhVi:"", linkDinhVi:"",
+    hetHanPhuHieu:"", phuHieuMoi:"", soPhuHieu:"",
+    ghiChuPhapLy:"", phuongThucMua:"Trả thẳng", soTienVay:0, traTruoc:34000000,
+    khuVuc:"TP.HCM", linkDrive:"",
+    hinhThuc:"Cho thuê xe máy", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] }
+];
+const DEMO_M = {
+  "68A-123.45":[
+    { id:"2026-07", doanhThu:42000000, chiPhi:7500000, nganHang:11200000, ghiChu:"Cao điểm hè" },
+    { id:"2026-06", doanhThu:31000000, chiPhi:6900000, nganHang:11200000, ghiChu:"" }
+  ],
+  "68A-678.90":[{ id:"2026-07", doanhThu:17500000, chiPhi:2800000, nganHang:0, ghiChu:"" }],
+  "68B-222.11":[{ id:"2026-07", doanhThu:4200000, chiPhi:600000, nganHang:0, ghiChu:"" }]
+};
+
+let VEHICLES = LIVE ? [] : structuredClone(DEMO);
+let MONTHLY  = LIVE ? {} : structuredClone(DEMO_M);
+
+async function loadVehicles(){
+  if(!LIVE) return;
+  const snap = await FS.getDocs(FS.collection(db,"vehicles"));
+  VEHICLES = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+}
+async function loadMonthly(vid){
+  if(!LIVE) return MONTHLY[vid]||[];
+  const snap = await FS.getDocs(FS.collection(db,"vehicles",vid,"monthly"));
+  MONTHLY[vid] = snap.docs.map(d=>({ id:d.id, ...d.data() })).sort((a,b)=>b.id.localeCompare(a.id));
+  return MONTHLY[vid];
+}
+async function saveVehicle(v){
+  const { id, ...rest } = v;
+  if(LIVE) await FS.setDoc(FS.doc(db,"vehicles",id), rest, { merge:true });
+  const i = VEHICLES.findIndex(x=>x.id===id);
+  if(i>=0) VEHICLES[i]=v; else VEHICLES.push(v);
+}
+async function removeVehicle(id){
+  if(LIVE) await FS.deleteDoc(FS.doc(db,"vehicles",id));
+  VEHICLES = VEHICLES.filter(x=>x.id!==id);
+  delete MONTHLY[id];
+}
+async function saveMonth(vid, m){
+  const { id, ...rest } = m;
+  if(LIVE) await FS.setDoc(FS.doc(db,"vehicles",vid,"monthly",id), rest, { merge:true });
+  const arr = MONTHLY[vid] || (MONTHLY[vid]=[]);
+  const i = arr.findIndex(x=>x.id===id);
+  if(i>=0) arr[i]=m; else arr.push(m);
+  arr.sort((a,b)=>b.id.localeCompare(a.id));
+}
+
+/* =========================================================
+   4. TIỆN ÍCH
+   ========================================================= */
+const nf = new Intl.NumberFormat("vi-VN");
+const money = n => (n||n===0) ? nf.format(Math.round(n)) : "—";
+const esc = s => String(s??"").replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const dmy = s => { if(!s) return "—"; const [y,m,d]=s.split("-"); return d?`${d}/${m}/${y}`:s; };
+const daysLeft = s => s ? Math.ceil((new Date(s+"T00:00:00") - new Date().setHours(0,0,0,0))/864e5) : null;
+const thisMonth = () => new Date().toISOString().slice(0,7);
+const monthLabel = id => { const [y,m]=id.split("-"); return { m:`T${+m}`, y }; };
+const profit = m => (+m.doanhThu||0) - (+m.chiPhi||0) - (+m.nganHang||0);
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch{ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch{} }
+};
+
+function docState(d){
+  if(d===null) return { cls:"none", big:"—", small:"chưa có" };
+  if(d < 0)    return { cls:"bad",  big:Math.abs(d), small:"quá hạn" };
+  if(d <= WARN_DAYS) return { cls:"warn", big:d, small:"ngày" };
+  return { cls:"ok", big:d, small:"ngày" };
+}
+/* Giấy tờ gấp nhất của 1 xe */
+function urgent(v){
+  let best = null;
+  for(const D of DOCS){
+    const d = daysLeft(v[D.key]);
+    if(d===null) continue;
+    if(!best || d < best.d) best = { d, doc:D };
+  }
+  if(!best) return { cls:"none", big:"—", small:"chưa có", d:null, doc:null };
+  return { ...docState(best.d), d:best.d, doc:best.doc, small:best.doc.tag };
+}
+/* Toàn bộ cảnh báo trong đội xe */
+function allAlerts(){
+  const out = [];
+  for(const v of VEHICLES) for(const D of DOCS){
+    const d = daysLeft(v[D.key]);
+    if(d!==null && d<=WARN_DAYS) out.push({ v, doc:D, d });
+  }
+  return out.sort((a,b)=>a.d-b.d);
+}
+/* Link Google Drive → ID → URL hiện được trong <img> */
+function driveId(u){
+  const s = String(u||"");
+  if(/\/folders\//.test(s)) return null;                 // link thư mục, không phải ảnh
+  const m = s.match(/\/file\/d\/([\w-]{20,})/)
+         || s.match(/[?&]id=([\w-]{20,})/)
+         || s.match(/\/d\/([\w-]{20,})/);
+  return m ? m[1] : null;
+}
+function imgSrc(u, w=1000){
+  const id = driveId(u);
+  return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${w}` : u;
+}
+const isFolder = u => /\/folders\//.test(String(u||""));
+function firstImg(v){
+  const u = (v.anh||[]).find(x=>/^https?:\/\//i.test(x) && !isFolder(x));
+  return u ? imgSrc(u, 300) : "";
+}
+
+/* =========================================================
+   5. THÔNG BÁO
+   ========================================================= */
+function notifyState(){
+  if(!("Notification" in window)) return "unsupported";
+  return Notification.permission;               // granted | denied | default
+}
+async function askNotify(){
+  if(!("Notification" in window)) return alert("Trình duyệt này không hỗ trợ thông báo.");
+  const p = await Notification.requestPermission();
+  if(p==="granted"){ fireNotify(true); render(); }
+  else if(p==="denied") alert("Ông đã chặn thông báo. Mở lại trong cài đặt trình duyệt cho trang này.");
+}
+async function showNoti(title, opts){
+  // Chrome trên Android CHẶN new Notification() trong PWA,
+  // bắt buộc đi qua service worker. Ưu tiên SW, không có mới fallback.
+  try{
+    if("serviceWorker" in navigator){
+      const reg = await navigator.serviceWorker.ready;
+      if(reg && reg.showNotification) return reg.showNotification(title, opts);
+    }
+  }catch{}
+  try{ new Notification(title, opts); }catch(e){ console.warn("Không bật được thông báo:", e); }
+}
+
+async function fireNotify(force=false){
+  if(notifyState()!=="granted") return;
+  const list = allAlerts();
+  if(!list.length) return;
+  const today = new Date().toISOString().slice(0,10);
+  if(!force && store.get("qlx_notified")===today) return;   // mỗi ngày 1 lần
+  store.set("qlx_notified", today);
+  const qh = list.filter(a=>a.d<0).length;
+  const body = list.slice(0,4)
+    .map(a=>`${a.v.id} — ${a.doc.label} ${a.d<0?`quá hạn ${Math.abs(a.d)} ngày`:`còn ${a.d} ngày`}`)
+    .join("\n") + (list.length>4 ? `\n…và ${list.length-4} mục nữa` : "");
+  await showNoti(
+    qh ? `${list.length} giấy tờ cần xử lý — ${qh} đã quá hạn` : `${list.length} giấy tờ sắp hết hạn`,
+    { body, tag:"qlx-alert", icon:"icon-192.png", badge:"icon-192.png", renotify:true }
+  );
+}
+
+/* =========================================================
+   6. GIAO DIỆN
+   ========================================================= */
+const app = document.getElementById("app");
+let VIEW = { name:"list", id:null, tab:"info" };
+let Q = "", FILTER = "all", AREA = "all";
+
+function go(name, id=null, tab="info"){
+  VIEW = { name, id, tab };
+  document.querySelectorAll("#nav button").forEach(b=>
+    b.setAttribute("aria-current", b.dataset.go===name ? "page" : "false"));
+  render();
+  window.scrollTo(0,0);
+}
+function render(){
+  if(VIEW.name==="list") return renderList();
+  if(VIEW.name==="new")  return renderForm(null);
+  if(VIEW.name==="edit") return renderForm(VEHICLES.find(v=>v.id===VIEW.id));
+  if(VIEW.name==="detail") return renderDetail();
+}
+function bellBtn(){
+  const n = allAlerts().length;
+  return `<button class="iconbtn" id="bell" title="Cảnh báo giấy tờ" aria-label="Cảnh báo giấy tờ">🔔${n?`<span class="dot">${n}</span>`:""}</button>`;
+}
+function wireBell(){
+  const b = document.getElementById("bell");
+  if(b) b.onclick = alertSheet;
+}
+
+/* ---- Danh sách ---- */
+function renderList(){
+  const types = [...new Set(VEHICLES.map(v=>v.hinhThuc).filter(Boolean))];
+  const areas = [...new Set(VEHICLES.map(v=>v.khuVuc).filter(Boolean))].sort();
+  const q = Q.trim().toLowerCase();
+  let rows = VEHICLES.filter(v=>{
+    const hit = !q || [v.id,v.hangXe,v.vin,v.soMay,v.soPhuHieu,v.khuVuc,v.dungGiayTo]
+      .some(x=>String(x||"").toLowerCase().includes(q));
+    if(!hit) return false;
+    if(AREA!=="all" && v.khuVuc!==AREA) return false;
+    if(FILTER==="all") return true;
+    if(FILTER==="__warn") return urgent(v).d!==null && urgent(v).d<=WARN_DAYS;
+    return v.hinhThuc===FILTER;
+  });
+  rows.sort((a,b)=>{
+    const x=urgent(a).d, y=urgent(b).d;
+    if(x===null) return 1; if(y===null) return -1; return x-y;
+  });
+
+  const alerts = allAlerts();
+  const perm = notifyState();
+
+  app.innerHTML = `
+    <header class="bar">
+      ${LOGO}
+      <h1>Quản lý xe<span class="sub">${VEHICLES.length} xe trong đội</span></h1>
+      ${bellBtn()}
+    </header>
+    ${!LIVE ? `<div class="banner">Đang chạy dữ liệu mẫu. Dán Firebase config vào đầu <b>index.html</b> để lưu thật.</div>`:""}
+    ${alerts.length ? `<div class="banner red">
+      ${alerts.length} giấy tờ còn dưới ${WARN_DAYS} ngày hoặc đã quá hạn.
+      <button id="openAlerts">Xem danh sách</button></div>`:""}
+    ${alerts.length && perm==="default" ? `<div class="banner">
+      Bật thông báo để máy tự nhắc khi còn ${WARN_DAYS} ngày.
+      <button id="askN">Bật thông báo</button></div>`:""}
+    <div class="search"><input id="q" placeholder="Tìm biển số, hãng, VIN, số phù hiệu…" value="${esc(Q)}"></div>
+    ${areas.length>1?`<div class="chips">
+      <span class="chiplb">Khu vực</span>
+      <button class="chip" data-a="all" aria-pressed="${AREA==="all"}">Tất cả</button>
+      ${areas.map(a=>`<button class="chip" data-a="${esc(a)}" aria-pressed="${AREA===a}">${esc(a)}</button>`).join("")}
+    </div>`:""}
+    <div class="chips">
+      ${areas.length>1?`<span class="chiplb">Lọc</span>`:""}
+      <button class="chip" data-f="all" aria-pressed="${FILTER==="all"}">Tất cả</button>
+      <button class="chip" data-f="__warn" aria-pressed="${FILTER==="__warn"}">Sắp hết hạn</button>
+      ${types.map(t=>`<button class="chip" data-f="${esc(t)}" aria-pressed="${FILTER===t}">${esc(t)}</button>`).join("")}
+    </div>
+    <div class="list">${
+      rows.length ? rows.map(vCard).join("")
+      : `<div class="empty" style="grid-column:1/-1"><div class="ic">🚗</div>
+         <p>${q||FILTER!=="all"?"Không có xe nào khớp.":"Chưa có xe nào trong đội."}</p>
+         ${q||FILTER!=="all"?"":`<button class="btn" data-go2="new" style="max-width:230px;margin:0 auto">Thêm xe đầu tiên</button>`}</div>`
+    }</div>`;
+
+  const qi = document.getElementById("q");
+  qi.oninput = e => { Q = e.target.value; const p=qi.selectionStart; renderList();
+    const n=document.getElementById("q"); n.focus(); n.setSelectionRange(p,p); };
+  app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{ FILTER=b.dataset.f; renderList(); });
+  app.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{ AREA=b.dataset.a; renderList(); });
+  app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
+  app.querySelectorAll("[data-go2]").forEach(b=>b.onclick=()=>go(b.dataset.go2));
+  const oa = document.getElementById("openAlerts"); if(oa) oa.onclick = alertSheet;
+  const an = document.getElementById("askN"); if(an) an.onclick = askNotify;
+  wireBell();
+}
+
+function docPills(v){
+  return `<div class="pills">${DOCS.map(D=>{
+    const s = docState(daysLeft(v[D.key]));
+    const txt = s.cls==="none" ? "—" : s.cls==="bad" ? `quá ${s.big}n` : `${s.big}n`;
+    return `<span class="pill ${s.cls}">${D.tag} ${txt}</span>`;
+  }).join("")}</div>`;
+}
+function vCard(v){
+  const t = urgent(v), img = firstImg(v);
+  return `<div class="card"><button class="vcard" data-v="${esc(v.id)}">
+    <div class="vthumb" ${img?`style="background-image:url('${esc(img)}')"`:""}>${img?"":"ẢNH"}</div>
+    <div class="vmain">
+      <div class="plate sm"><span>${esc(v.id)}</span></div>
+      <div class="vname">${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</div>
+      <div class="vmeta">${v.khuVuc?`<b style="color:var(--ink-2)">${esc(v.khuVuc)}</b> · `:""}${esc(v.loaiXe||"—")} · ${v.namSX||"—"}</div>
+      ${docPills(v)}
+    </div>
+    <div class="tem ${t.cls}"><b>${t.big}</b><i>${t.small}</i></div>
+  </button></div>`;
+}
+
+/* ---- Bảng cảnh báo ---- */
+function alertSheet(){
+  const list = allAlerts();
+  const perm = notifyState();
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>Cảnh báo<span class="sub">Còn ≤ ${WARN_DAYS} ngày hoặc đã quá hạn</span></h1></header>
+    <div class="f">
+      ${perm==="granted" ? `<div class="banner" style="margin:0 0 14px">Thông báo đang bật trên máy này.</div>`
+        : perm==="denied" ? `<div class="banner" style="margin:0 0 14px">Thông báo đang bị chặn. Mở cài đặt trình duyệt cho trang này để bật lại.</div>`
+        : perm==="unsupported" ? "" 
+        : `<button class="btn" id="askN2" style="margin-bottom:14px">Bật thông báo trên máy này</button>`}
+      ${list.length ? `<div class="kv">${list.map(a=>{
+        const s = docState(a.d);
+        return `<button class="mrow" data-v="${esc(a.v.id)}">
+          <span class="tem sm ${s.cls}"><b>${s.big}</b><i>${s.small}</i></span>
+          <span style="flex:1;min-width:0">
+            <span class="plate sm"><span>${esc(a.v.id)}</span></span>
+            <span style="display:block;font-size:12.5px;margin-top:5px;font-weight:600">${a.doc.label}</span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3)">Hết hạn ${dmy(a.v[a.doc.key])}</span>
+          </span>
+          <span style="color:var(--ink-3)">›</span></button>`; }).join("")}</div>`
+      : `<div class="empty"><div class="ic">✅</div><p>Không có giấy tờ nào sắp hết hạn.</p></div>`}
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+  const a2 = el.querySelector("#askN2"); if(a2) a2.onclick = async()=>{ await askNotify(); el.remove(); alertSheet(); };
+  el.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{ el.remove(); go("detail", b.dataset.v); });
+}
+
+/* ---- Chi tiết ---- */
+async function renderDetail(){
+  const v = VEHICLES.find(x=>x.id===VIEW.id);
+  if(!v) return go("list");
+  await loadMonthly(v.id);
+  const t = urgent(v);
+
+  app.innerHTML = `
+    <header class="bar">
+      <button class="iconbtn" id="back">‹</button>
+      <h1>Chi tiết xe</h1>
+      ${bellBtn()}
+      <button class="iconbtn" id="edit">✎</button>
+    </header>
+    <div class="hero"><div class="inner">
+      <div class="row">
+        <div class="plate lg"><span>${esc(v.id)}</span></div>
+        <div style="flex:1"></div>
+        <div class="tem ${t.cls}"><b>${t.big}</b><i>${t.small}</i></div>
+      </div>
+      <div class="nm">${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</div>
+      <div class="mt">${v.khuVuc?`📍 ${esc(v.khuVuc)} · `:""}${esc(v.loaiXe||"—")} · ${v.namSX||"—"} · ${esc(v.hinhThuc||"—")}</div>
+    </div></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-t="info" aria-selected="${VIEW.tab==="info"}">Giấy tờ &amp; xe</button>
+      <button class="tab" role="tab" data-t="fin"  aria-selected="${VIEW.tab==="fin"}">Tài chính</button>
+      <button class="tab" role="tab" data-t="mon"  aria-selected="${VIEW.tab==="mon"}">Theo tháng</button>
+    </div>
+    <div id="tabbody"></div>`;
+
+  document.getElementById("back").onclick = ()=>go("list");
+  document.getElementById("edit").onclick = ()=>go("edit", v.id);
+  wireBell();
+  app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ VIEW.tab=b.dataset.t; renderDetail(); });
+  document.getElementById("tabbody").innerHTML =
+    VIEW.tab==="info" ? tabInfo(v) : VIEW.tab==="fin" ? tabFin(v) : tabMonthly(v);
+  wireTab(v);
+}
+
+function docRow(v, D){
+  const d = daysLeft(v[D.key]);
+  const s = docState(d);
+  const txt = d===null ? "Chưa nhập" : d<0 ? `Quá hạn ${Math.abs(d)} ngày` : `Còn ${d} ngày`;
+  const cls = s.cls==="bad" ? "neg" : s.cls==="warn" ? "wr" : s.cls==="ok" ? "pos" : "";
+  return `<div class="r"><span class="k">${D.label}</span>
+    <span class="v"><span class="${cls}">${txt}</span>
+    <span style="display:block;font-size:11.5px;color:var(--ink-3);font-weight:400">
+      ${v[D.key]?`hết hạn ${dmy(v[D.key])}`:""}${v[D.newKey]?` · gia hạn ${dmy(v[D.newKey])}`:""}</span></span></div>`;
+}
+
+function tabInfo(v){
+  const imgs = (v.anh||[]).filter(u=>/^https?:\/\//i.test(u));
+  return `<div class="secs">
+  <div class="sec"><h3>Thời hạn giấy tờ</h3><div class="kv">
+    ${DOCS.map(D=>docRow(v,D)).join("")}
+    ${v.nhaMangDinhVi?`<div class="r"><span class="k">Nhà cung cấp định vị</span><span class="v">${esc(v.nhaMangDinhVi)}</span></div>`:""}
+    ${v.soPhuHieu?`<div class="r"><span class="k">Số phù hiệu</span><span class="v mono">${esc(v.soPhuHieu)}</span></div>`:""}
+  </div></div>
+  <div class="sec"><h3>Xem định vị</h3><div class="kv">
+    ${v.linkDinhVi ? `<a class="drive" href="${esc(v.linkDinhVi)}" target="_blank" rel="noopener">
+        <span class="dic">🛰️</span>
+        <span class="dtx"><b>Mở trang định vị${v.nhaMangDinhVi?` — ${esc(v.nhaMangDinhVi)}`:""}</b>
+        <span>${esc(v.linkDinhVi)}</span></span>
+        <span style="color:var(--ink-3)">↗</span></a>`
+      : `<div class="r"><span class="k">Chưa gắn link trang định vị. Bấm ✎ để thêm.</span></div>`}
+  </div></div>
+  <div class="sec"><h3>Nhận dạng</h3><div class="kv">
+    <div class="r"><span class="k">Biển số</span><span class="v">${esc(v.id)}</span></div>
+    ${v.soCho?`<div class="r"><span class="k">Số chỗ</span><span class="v">${v.soCho} chỗ</span></div>`:""}
+    ${v.dungGiayTo?`<div class="r"><span class="k">Đứng giấy tờ</span><span class="v">${esc(v.dungGiayTo)}</span></div>`:""}
+    ${v.hinhThuc?`<div class="r"><span class="k">Hình thức</span><span class="v">${esc(v.hinhThuc)}</span></div>`:""}
+    <div class="r"><span class="k">Số khung (VIN)</span><span class="v mono">${esc(v.vin||"—")}</span></div>
+    <div class="r"><span class="k">Số máy</span><span class="v mono">${esc(v.soMay||"—")}</span></div>
+    <div class="r"><span class="k">Năm sản xuất</span><span class="v">${v.namSX||"—"}</span></div>
+    <div class="r"><span class="k">Cà vẹt</span><span class="v">${esc(v.caVet||"—")}</span></div>
+  </div></div>
+  ${v.ghiChuPhapLy?`<div class="sec full"><h3>Ghi chú pháp lý</h3>
+    <div class="kv"><div class="r"><span class="v" style="text-align:left;font-weight:400">${esc(v.ghiChuPhapLy)}</span></div></div></div>`:""}
+  <div class="sec"><h3>Hồ sơ trên Drive</h3><div class="kv">
+    ${v.linkDrive ? `<a class="drive" href="${esc(v.linkDrive)}" target="_blank" rel="noopener">
+        <span class="dic">📁</span>
+        <span class="dtx"><b>Mở thư mục hồ sơ xe</b><span>${esc(v.linkDrive)}</span></span>
+        <span style="color:var(--ink-3)">↗</span></a>`
+      : `<div class="r"><span class="k">Chưa gắn link Drive. Bấm ✎ để thêm.</span></div>`}
+  </div></div>
+  <div class="sec full"><h3>Hình ảnh</h3>${
+    imgs.length ? `<div class="ph">${imgs.map(u=>
+      isFolder(u)
+      ? `<a href="${esc(u)}" target="_blank" rel="noopener"><div class="dead">📁 Thư mục Drive<br>Bấm để mở</div></a>`
+      : `<a href="${esc(u)}" target="_blank" rel="noopener">
+         <img src="${esc(imgSrc(u))}" loading="lazy" alt=""
+              onerror="this.parentNode.innerHTML='<div class=\\'dead\\'>Ảnh không mở được.<br>Kiểm tra quyền chia sẻ trên Drive.</div>'">
+       </a>`).join("")}</div>`
+    : `<div class="kv"><div class="r"><span class="k">Chưa có link ảnh nào</span></div></div>`
+  }</div>
+  <div class="sec full"><button class="btn danger" id="del">Xoá xe này</button></div>
+  </div>`;
+}
+
+function tabFin(v){
+  const vay = +v.soTienVay||0, tt = +v.traTruoc||0;
+  const all = MONTHLY[v.id]||[];
+  const tra = all.reduce((s,m)=>s+(+m.nganHang||0),0);
+  const conLai = Math.max(0, vay - tra);
+  const lai = all.reduce((s,m)=>s+profit(m),0);
+  return `<div class="secs">
+  <div class="sec"><h3>Mua xe</h3><div class="kv">
+    <div class="r"><span class="k">Ngày mua</span><span class="v">${dmy(v.ngayMua)}</span></div>
+    <div class="r"><span class="k">Giá mua</span><span class="v num">${money(v.giaMua)}</span></div>
+    <div class="r"><span class="k">Phương thức</span><span class="v">${esc(v.phuongThucMua||"—")}</span></div>
+    <div class="r"><span class="k">Trả trước</span><span class="v num">${money(tt)}</span></div>
+    <div class="r"><span class="k">Số tiền vay</span><span class="v num">${money(vay)}</span></div>
+  </div></div>
+  ${vay>0?`<div class="sec"><h3>Dư nợ</h3><div class="kv">
+    <div class="r"><span class="k">Đã trả ngân hàng</span><span class="v num">${money(tra)}</span></div>
+    <div class="r"><span class="k">Còn lại (ước tính)</span><span class="v num ${conLai>0?"neg":"pos"}">${money(conLai)}</span></div>
+  </div><div class="hint" style="font-size:11.5px;color:var(--ink-3);margin-top:6px">
+    Tính từ tổng cột “Ngân hàng” các tháng đã nhập — chưa tính lãi.</div></div>`:""}
+  <div class="sec full"><h3>Luỹ kế toàn thời gian</h3><div class="kv">
+    <div class="r"><span class="k">Tổng doanh thu</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.doanhThu||0),0))}</span></div>
+    <div class="r"><span class="k">Tổng chi vận hành</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.chiPhi||0),0))}</span></div>
+    <div class="r"><span class="k">Tổng trả ngân hàng</span><span class="v num">${money(tra)}</span></div>
+    <div class="r"><span class="k">Lợi nhuận luỹ kế</span><span class="v num ${lai>=0?"pos":"neg"}">${money(lai)}</span></div>
+  </div></div></div>`;
+}
+
+function tabMonthly(v){
+  const arr = MONTHLY[v.id]||[];
+  return `<div class="secs">
+  <div class="sec full"><button class="btn" id="addm">＋ Nhập số liệu tháng</button></div>
+  <div class="sec full"><h3>Lịch sử ${arr.length?`(${arr.length} tháng)`:""}</h3>
+    ${arr.length ? `<div class="kv">${arr.map(m=>{
+      const p = profit(m), L = monthLabel(m.id);
+      return `<button class="mrow" data-m="${m.id}">
+        <span class="mtag"><b>${L.m}</b>${L.y}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-family:'Oswald';font-size:17px;font-weight:600" class="${p>=0?"v pos":"v neg"}">${money(p)}</span>
+          <span style="display:block;font-size:11.5px;color:var(--ink-3)">Thu ${money(m.doanhThu)} · Chi ${money(m.chiPhi)} · NH ${money(m.nganHang)}</span>
+        </span>
+        <span style="color:var(--ink-3)">›</span></button>`; }).join("")}</div>`
+    : `<div class="kv"><div class="r"><span class="k">Chưa có tháng nào. Cuối tháng nhập 3 số: doanh thu, chi phí, tiền ngân hàng.</span></div></div>`}
+  </div></div>`;
+}
+
+function wireTab(v){
+  const del = document.getElementById("del");
+  if(del) del.onclick = async()=>{
+    if(!confirm(`Xoá xe ${v.id} và toàn bộ số liệu tháng?`)) return;
+    await removeVehicle(v.id); go("list");
+  };
+  const addm = document.getElementById("addm");
+  if(addm) addm.onclick = ()=>monthSheet(v, null);
+  app.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>
+    monthSheet(v, (MONTHLY[v.id]||[]).find(x=>x.id===b.dataset.m)));
+}
+
+/* ---- Nhập tháng ---- */
+function monthSheet(v, m){
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>Số liệu tháng<span class="sub">${esc(v.id)}</span></h1></header>
+    <div class="f">
+      <div class="fg"><label>Tháng</label>
+        <input type="month" id="mm" value="${m?m.id:thisMonth()}" ${m?"disabled":""}>
+        ${m?`<div class="hint">Không đổi được tháng khi sửa.</div>`:""}</div>
+      <div class="fg"><label>Doanh thu (VNĐ)</label>
+        <input type="number" inputmode="numeric" id="dt" value="${m?.doanhThu??""}"></div>
+      <div class="fg"><label>Chi phí vận hành (VNĐ)</label>
+        <input type="number" inputmode="numeric" id="cp" value="${m?.chiPhi??""}">
+        <div class="hint">Xăng, rửa xe, bảo dưỡng, phí định vị, vá lốp…</div></div>
+      <div class="fg"><label>Trả ngân hàng (VNĐ)</label>
+        <input type="number" inputmode="numeric" id="nh" value="${m?.nganHang??""}"></div>
+      <div class="fg"><label>Ghi chú</label><textarea id="gc">${esc(m?.ghiChu||"")}</textarea></div>
+      <div class="kv" style="margin-bottom:14px"><div class="r">
+        <span class="k">Lợi nhuận tháng</span><span class="v num" id="lp">—</span></div></div>
+      <button class="btn" id="save">Lưu tháng</button>
+    </div>`;
+  document.body.appendChild(el);
+
+  const calc = ()=>{
+    const p = (+el.querySelector("#dt").value||0) - (+el.querySelector("#cp").value||0) - (+el.querySelector("#nh").value||0);
+    const o = el.querySelector("#lp");
+    o.textContent = money(p); o.className = "v num " + (p>=0?"pos":"neg");
+  };
+  ["#dt","#cp","#nh"].forEach(s=>el.querySelector(s).oninput=calc); calc();
+  el.querySelector("#x").onclick = ()=>el.remove();
+  el.querySelector("#save").onclick = async()=>{
+    const id = el.querySelector("#mm").value;
+    if(!id) return alert("Chọn tháng đã.");
+    await saveMonth(v.id, {
+      id,
+      doanhThu:+el.querySelector("#dt").value||0,
+      chiPhi:+el.querySelector("#cp").value||0,
+      nganHang:+el.querySelector("#nh").value||0,
+      ghiChu:el.querySelector("#gc").value.trim()
+    });
+    el.remove(); VIEW.tab="mon"; renderDetail();
+  };
+}
+
+/* ---- Form xe ---- */
+function renderForm(v){
+  const e = v||{};
+  const F = (id,label,type="text",val="",hint="")=>`
+    <div class="fg"><label>${label}</label>
+      <input id="${id}" type="${type}" ${type==="number"?'inputmode="numeric"':""} value="${esc(val??"")}">
+      ${hint?`<div class="hint">${hint}</div>`:""}</div>`;
+
+  app.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="back">‹</button>
+      <h1>${v?"Sửa thông tin xe":"Thêm xe mới"}</h1></header>
+    <div class="f">
+      <div class="fg"><label>Biển số xe *</label>
+        <input id="bs" value="${esc(e.id||"")}" ${v?"disabled":""} placeholder="68A-123.45">
+        ${v?`<div class="hint">Biển số là khoá chính, không sửa được. Đổi biển thì tạo xe mới rồi xoá xe cũ.</div>`
+           :`<div class="hint">Đây là mã định danh của xe trong app.</div>`}</div>
+      <div class="two">${F("hx","Hãng xe","text",e.hangXe)}${F("sc","Số chỗ","number",e.soCho)}</div>
+      <div class="two">${F("lx","Loại xe","text",e.loaiXe,"Ô tô 4 chỗ, 7 chỗ, xe máy…")}${F("ns","Năm sản xuất","number",e.namSX)}</div>
+      <div class="fg"><label>Khu vực</label>
+        <input id="kv" list="kvlist" value="${esc(e.khuVuc||"")}" placeholder="Phú Quốc">
+        <datalist id="kvlist">${[...new Set(VEHICLES.map(x=>x.khuVuc).filter(Boolean))]
+          .map(a=>`<option value="${esc(a)}">`).join("")}</datalist>
+        <div class="hint">Xe đang nằm ở đâu. Gõ mới hoặc chọn khu vực đã có.</div></div>
+      <div class="fg"><label>Đứng giấy tờ</label>
+        <input id="dgt" list="dgtlist" value="${esc(e.dungGiayTo||"")}" placeholder="Tên người / công ty trên cà vẹt">
+        <datalist id="dgtlist">${[...new Set(VEHICLES.map(x=>x.dungGiayTo).filter(Boolean))]
+          .map(a=>`<option value="${esc(a)}">`).join("")}</datalist>
+        <div class="hint">Xe đăng ký đứng tên ai.</div></div>
+      <div class="fg"><label>Hình thức</label>
+        <input id="ht" list="htlist" value="${esc(e.hinhThuc||"")}" placeholder="Cho thuê tự lái">
+        <datalist id="htlist">${[...new Set(VEHICLES.map(x=>x.hinhThuc).filter(Boolean))]
+          .map(a=>`<option value="${esc(a)}">`).join("")}</datalist>
+        <div class="hint">Dùng làm bộ lọc ở danh sách xe.</div></div>
+
+      <div class="fhead">Đăng kiểm</div>
+      <div class="two">${F("dkm","Lần gần nhất","date",e.dangKiemMoi)}${F("dkh","Hết hạn","date",e.hetHanDangKiem)}</div>
+
+      <div class="fhead">Định vị (GPS)</div>
+      ${F("dvn","Nhà cung cấp","text",e.nhaMangDinhVi,"Viettel, Bình Anh, Vinasun Tracking…")}
+      ${F("dvl","Link trang định vị","text",e.linkDinhVi,"Dán link portal của hãng. App tạo nút mở thẳng ở tab Giấy tờ.")}
+      <div class="two">${F("dvm","Gia hạn gần nhất","date",e.dinhViMoi)}${F("dvh","Hết hạn thuê bao","date",e.hetHanDinhVi)}</div>
+
+      <div class="fhead">Phù hiệu</div>
+      ${F("phs","Số phù hiệu","text",e.soPhuHieu)}
+      <div class="two">${F("phm","Cấp ngày","date",e.phuHieuMoi)}${F("phh","Hết hạn","date",e.hetHanPhuHieu)}</div>
+
+      <div class="fhead">Nhận dạng</div>
+      ${F("vin","Số khung (VIN)","text",e.vin)}
+      ${F("sm","Số máy","text",e.soMay)}
+      ${F("cv","Cà vẹt đang ở đâu","text",e.caVet,"Ngân hàng giữ / bản gốc két công ty…")}
+
+      <div class="fhead">Tài chính</div>
+      ${F("nm","Ngày mua","date",e.ngayMua)}
+      ${F("gm","Giá mua (VNĐ)","number",e.giaMua)}
+      <div class="fg"><label>Phương thức mua</label>
+        <select id="pt">${["Trả thẳng","Trả góp","Thuê tài chính","Khác"].map(o=>
+          `<option ${e.phuongThucMua===o?"selected":""}>${o}</option>`).join("")}</select></div>
+      <div class="two">${F("tt","Trả trước (VNĐ)","number",e.traTruoc)}${F("vay","Số tiền vay (VNĐ)","number",e.soTienVay)}</div>
+
+      <div class="fhead">Hồ sơ &amp; hình ảnh</div>
+      <div class="fg"><label>Link thư mục Google Drive</label>
+        <input id="drv" value="${esc(e.linkDrive||"")}" placeholder="https://drive.google.com/drive/folders/...">
+        <div class="hint">Dán link thư mục chứa cà vẹt, hợp đồng, giấy tờ xe. App tạo nút mở thẳng.</div></div>
+      <div class="fg"><label>Link ảnh</label>
+        <textarea id="anh" placeholder="https://drive.google.com/file/d/...&#10;https://..." style="min-height:88px">${esc((e.anh||[]).join("\n"))}</textarea>
+        <div class="hint">Mỗi dòng một link. Link file ảnh trên Drive dán thẳng được — app tự đổi sang dạng hiện được, miễn là file đặt “Bất kỳ ai có đường liên kết”.</div></div>
+      <div class="fg"><label>Ghi chú pháp lý</label><textarea id="gc">${esc(e.ghiChuPhapLy||"")}</textarea></div>
+
+      <button class="btn" id="save">${v?"Lưu thay đổi":"Thêm xe"}</button>
+      <div style="height:10px"></div>
+      <button class="btn ghost" id="cancel">Huỷ</button>
+    </div>`;
+
+  const back = ()=> v ? go("detail", v.id) : go("list");
+  document.getElementById("back").onclick = back;
+  document.getElementById("cancel").onclick = back;
+  document.getElementById("save").onclick = async()=>{
+    const g = id => document.getElementById(id).value.trim();
+    const n = id => document.getElementById(id).value===""?null:+document.getElementById(id).value;
+    const bs = v ? v.id : g("bs").toUpperCase();
+    if(!bs) return alert("Nhập biển số xe đã.");
+    if(!v && VEHICLES.some(x=>x.id===bs)) return alert("Biển số này đã có trong đội xe rồi.");
+    await saveVehicle({
+      id:bs, hangXe:g("hx"), soCho:n("sc"), loaiXe:g("lx"),
+      namSX:n("ns"), khuVuc:g("kv"), dungGiayTo:g("dgt"), hinhThuc:g("ht"), linkDrive:g("drv"),
+      dangKiemMoi:g("dkm"), hetHanDangKiem:g("dkh"),
+      nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:g("dvm"), hetHanDinhVi:g("dvh"),
+      soPhuHieu:g("phs"), phuHieuMoi:g("phm"), hetHanPhuHieu:g("phh"),
+      vin:g("vin"), soMay:g("sm"), caVet:g("cv"),
+      ngayMua:g("nm"), giaMua:n("gm"), phuongThucMua:document.getElementById("pt").value,
+      traTruoc:n("tt"), soTienVay:n("vay"), ghiChuPhapLy:g("gc"),
+      anh:g("anh").split("\n").map(s=>s.trim()).filter(Boolean)
+    });
+    go("detail", bs);
+  };
+}
+
+/* =========================================================
+   7. KHỞI ĐỘNG
+   ========================================================= */
+document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>go(b.dataset.go));
+await loadVehicles();
+go("list");
+fireNotify();
+setInterval(fireNotify, 6*60*60*1000);   // mở app lâu thì 6 tiếng kiểm lại
+
+if("serviceWorker" in navigator)
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
