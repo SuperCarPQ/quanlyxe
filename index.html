@@ -241,13 +241,12 @@ a{color:inherit}
    1. CẤU HÌNH FIREBASE — dán config của ông vào đây
    ========================================================= */
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAHNrQ3bCVvYFeJK1Kse2_kTxWsyXfq3Bo",
-  authDomain: "quanlyxe-56f38.firebaseapp.com",
-  projectId: "quanlyxe-56f38",
-  storageBucket: "quanlyxe-56f38.firebasestorage.app",
-  messagingSenderId: "813079830527",
-  appId: "1:813079830527:web:ed3c679df01b3bd1ae91ca",
-  measurementId: "G-9SDT6FWRR6"
+  apiKey: "DAN_API_KEY_VAO_DAY",
+  authDomain: "xxx.firebaseapp.com",
+  projectId: "xxx",
+  storageBucket: "xxx.appspot.com",
+  messagingSenderId: "000000",
+  appId: "1:000000:web:xxxx"
 };
 
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
@@ -462,7 +461,7 @@ async function fireNotify(force=false){
    ========================================================= */
 const app = document.getElementById("app");
 let VIEW = { name:"list", id:null, tab:"info" };
-let Q = "", FILTER = "all", AREA = "all";
+let Q = "", FILTER = "all";
 
 function go(name, id=null, tab="info"){
   VIEW = { name, id, tab };
@@ -488,23 +487,22 @@ function wireBell(){
 
 /* ---- Danh sách ---- */
 function renderList(){
-  const types = [...new Set(VEHICLES.map(v=>v.hinhThuc).filter(Boolean))];
   const areas = [...new Set(VEHICLES.map(v=>v.khuVuc).filter(Boolean))].sort();
   const q = Q.trim().toLowerCase();
   let rows = VEHICLES.filter(v=>{
     const hit = !q || [v.id,v.hangXe,v.vin,v.soMay,v.soPhuHieu,v.khuVuc,v.dungGiayTo]
       .some(x=>String(x||"").toLowerCase().includes(q));
     if(!hit) return false;
-    if(AREA!=="all" && v.khuVuc!==AREA) return false;
     if(FILTER==="all") return true;
     if(FILTER==="__warn") return urgent(v).d!==null && urgent(v).d<=WARN_DAYS;
-    return v.hinhThuc===FILTER;
+    return v.khuVuc===FILTER;
   });
   rows.sort((a,b)=>{
     const x=urgent(a).d, y=urgent(b).d;
     if(x===null) return 1; if(y===null) return -1; return x-y;
   });
 
+  if(FILTER!=="all" && FILTER!=="__warn" && !areas.includes(FILTER)) FILTER = "all";
   const alerts = allAlerts();
   const perm = notifyState();
 
@@ -522,16 +520,10 @@ function renderList(){
       Bật thông báo để máy tự nhắc khi còn ${WARN_DAYS} ngày.
       <button id="askN">Bật thông báo</button></div>`:""}
     <div class="search"><input id="q" placeholder="Tìm biển số, hãng, VIN, số phù hiệu…" value="${esc(Q)}"></div>
-    ${areas.length>1?`<div class="chips">
-      <span class="chiplb">Khu vực</span>
-      <button class="chip" data-a="all" aria-pressed="${AREA==="all"}">Tất cả</button>
-      ${areas.map(a=>`<button class="chip" data-a="${esc(a)}" aria-pressed="${AREA===a}">${esc(a)}</button>`).join("")}
-    </div>`:""}
     <div class="chips">
-      ${areas.length>1?`<span class="chiplb">Lọc</span>`:""}
       <button class="chip" data-f="all" aria-pressed="${FILTER==="all"}">Tất cả</button>
       <button class="chip" data-f="__warn" aria-pressed="${FILTER==="__warn"}">Sắp hết hạn</button>
-      ${types.map(t=>`<button class="chip" data-f="${esc(t)}" aria-pressed="${FILTER===t}">${esc(t)}</button>`).join("")}
+      ${areas.map(a=>`<button class="chip" data-f="${esc(a)}" aria-pressed="${FILTER===a}">📍 ${esc(a)}</button>`).join("")}
     </div>
     <div class="list">${
       rows.length ? rows.map(vCard).join("")
@@ -544,7 +536,6 @@ function renderList(){
   qi.oninput = e => { Q = e.target.value; const p=qi.selectionStart; renderList();
     const n=document.getElementById("q"); n.focus(); n.setSelectionRange(p,p); };
   app.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{ FILTER=b.dataset.f; renderList(); });
-  app.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>{ AREA=b.dataset.a; renderList(); });
   app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
   app.querySelectorAll("[data-go2]").forEach(b=>b.onclick=()=>go(b.dataset.go2));
   const oa = document.getElementById("openAlerts"); if(oa) oa.onclick = alertSheet;
@@ -829,7 +820,7 @@ function renderForm(v){
         <input id="kv" list="kvlist" value="${esc(e.khuVuc||"")}" placeholder="Phú Quốc">
         <datalist id="kvlist">${[...new Set(VEHICLES.map(x=>x.khuVuc).filter(Boolean))]
           .map(a=>`<option value="${esc(a)}">`).join("")}</datalist>
-        <div class="hint">Xe đang nằm ở đâu. Gõ mới hoặc chọn khu vực đã có.</div></div>
+        <div class="hint">Xe đang nằm ở đâu. Đây là bộ lọc trên danh sách xe — gõ mới hoặc chọn khu vực đã có.</div></div>
       <div class="fg"><label>Đứng giấy tờ</label>
         <input id="dgt" list="dgtlist" value="${esc(e.dungGiayTo||"")}" placeholder="Tên người / công ty trên cà vẹt">
         <datalist id="dgtlist">${[...new Set(VEHICLES.map(x=>x.dungGiayTo).filter(Boolean))]
@@ -839,7 +830,7 @@ function renderForm(v){
         <input id="ht" list="htlist" value="${esc(e.hinhThuc||"")}" placeholder="Cho thuê tự lái">
         <datalist id="htlist">${[...new Set(VEHICLES.map(x=>x.hinhThuc).filter(Boolean))]
           .map(a=>`<option value="${esc(a)}">`).join("")}</datalist>
-        <div class="hint">Dùng làm bộ lọc ở danh sách xe.</div></div>
+        <div class="hint">Cách khai thác xe: cho thuê tự lái, có tài xế…</div></div>
 
       <div class="fhead">Đăng kiểm</div>
       <div class="two">${F("dkm","Lần gần nhất","date",e.dangKiemMoi)}${F("dkh","Hết hạn","date",e.hetHanDangKiem)}</div>
