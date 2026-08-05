@@ -258,7 +258,14 @@ a{color:inherit}
    Config nằm ở file firebase-config.js cho khỏi mất khi cập nhật.
    Thiếu file đó thì app tự chạy dữ liệu mẫu.
    ========================================================= */
-const FIREBASE_CONFIG = window.FIREBASE_CONFIG || { apiKey: "DAN_API_KEY_VAO_DAY" };
+const FIREBASE_CONFIG = window.FIREBASE_CONFIG || 
+{ apiKey: "AIzaSyAHNrQ3bCVvYFeJK1Kse2_kTxWsyXfq3Bo",
+  authDomain: "quanlyxe-56f38.firebaseapp.com",
+  projectId: "quanlyxe-56f38",
+  storageBucket: "quanlyxe-56f38.firebasestorage.app",
+  messagingSenderId: "813079830527",
+  appId: "1:813079830527:web:ed3c679df01b3bd1ae91ca",
+  measurementId: "G-9SDT6FWRR6"" };
 
 const APP_VERSION = "1.4.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
