@@ -148,6 +148,8 @@ a{color:inherit}
 .fg .hint{font-size:11.5px;color:var(--ink-3);margin-top:4px}
 .fg textarea{resize:vertical;min-height:66px;font-family:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.cbx{display:flex;align-items:center;gap:9px;padding:9px 0 4px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.cbx input{width:18px;height:18px;flex:0 0 auto;accent-color:var(--ink);margin:0}
 .fhead{font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:24px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
 
 .btn{display:block;width:100%;background:var(--ink);color:#fff;border-radius:11px;padding:14px;font-weight:600;font-size:15px;text-align:center}
@@ -265,7 +267,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "1.4.1";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "1.5.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -323,6 +325,7 @@ const DEMO = [
     namSX:2024, ngayMua:"2024-05-19", giaMua:34000000, vin:"RLHJF6110RY000111", soMay:"JF61E-0009988",
     hetHanDangKiem:"", dangKiemMoi:"", hetHanDinhVi:"", dinhViMoi:"", nhaMangDinhVi:"", linkDinhVi:"",
     hetHanPhuHieu:"", phuHieuMoi:"", soPhuHieu:"",
+    khongApDung:["hetHanDangKiem","hetHanPhuHieu","hetHanDinhVi"],
     ghiChuPhapLy:"", phuongThucMua:"Trả thẳng", soTienVay:0, traTruoc:34000000,
     khuVuc:"TP.HCM", linkDrive:"",
     hinhThuc:"Cho thuê xe máy", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] }
@@ -392,10 +395,31 @@ function docState(d){
   if(d <= WARN_DAYS) return { cls:"warn", big:d, small:"ngày" };
   return { cls:"ok", big:d, small:"ngày" };
 }
+/* Giấy tờ không áp dụng cho xe này (vd xe máy không cần đăng kiểm, phù hiệu) */
+const naDoc = (v, key) => (v.khongApDung||[]).includes(key);
+
+/* Các mục còn trống của 1 xe */
+const INFO_FIELDS = [
+  { key:"vin",   label:"Số khung (VIN)" },
+  { key:"soMay", label:"Số máy" }
+];
+function missingInfo(v){
+  const out = [];
+  for(const D of DOCS)
+    if(!naDoc(v,D.key) && !v[D.key]) out.push(`Hạn ${D.label.toLowerCase()}`);
+  for(const F of INFO_FIELDS)
+    if(!String(v[F.key]||"").trim()) out.push(F.label);
+  return out;
+}
+const allMissing = () => VEHICLES.map(v=>({ v, thieu:missingInfo(v) }))
+                                 .filter(x=>x.thieu.length)
+                                 .sort((a,b)=>b.thieu.length-a.thieu.length);
+
 /* Giấy tờ gấp nhất của 1 xe */
 function urgent(v){
   let best = null;
   for(const D of DOCS){
+    if(naDoc(v,D.key)) continue;
     const d = daysLeft(v[D.key]);
     if(d===null) continue;
     if(!best || d < best.d) best = { d, doc:D };
@@ -407,6 +431,7 @@ function urgent(v){
 function allAlerts(){
   const out = [];
   for(const v of VEHICLES) for(const D of DOCS){
+    if(naDoc(v,D.key)) continue;
     const d = daysLeft(v[D.key]);
     if(d!==null && d<=WARN_DAYS) out.push({ v, doc:D, d });
   }
@@ -459,16 +484,20 @@ async function showNoti(title, opts){
 async function fireNotify(force=false){
   if(notifyState()!=="granted") return;
   const list = allAlerts();
-  if(!list.length) return;
+  const miss = allMissing();
+  if(!list.length && !miss.length) return;
   const today = new Date().toISOString().slice(0,10);
   if(!force && store.get("qlx_notified")===today) return;   // mỗi ngày 1 lần
   store.set("qlx_notified", today);
   const qh = list.filter(a=>a.d<0).length;
-  const body = list.slice(0,4)
+  let body = list.slice(0,4)
     .map(a=>`${a.v.id} — ${a.doc.label} ${a.d<0?`quá hạn ${Math.abs(a.d)} ngày`:`còn ${a.d} ngày`}`)
     .join("\n") + (list.length>4 ? `\n…và ${list.length-4} mục nữa` : "");
+  if(miss.length) body += `${body?"\n":""}${miss.length} xe còn thiếu thông tin`;
   await showNoti(
-    qh ? `${list.length} giấy tờ cần xử lý — ${qh} đã quá hạn` : `${list.length} giấy tờ sắp hết hạn`,
+    qh ? `${list.length} giấy tờ cần xử lý — ${qh} đã quá hạn`
+       : list.length ? `${list.length} giấy tờ sắp hết hạn`
+       : `${miss.length} xe thiếu thông tin`,
     { body, tag:"qlx-alert", icon:"icon-192.png", badge:"icon-192.png", renotify:true }
   );
 }
@@ -494,7 +523,7 @@ function render(){
   if(VIEW.name==="detail") return renderDetail();
 }
 function bellBtn(){
-  const n = allAlerts().length;
+  const n = allAlerts().length + allMissing().length;
   return `<button class="iconbtn" id="bell" title="Cảnh báo giấy tờ" aria-label="Cảnh báo giấy tờ">🔔${n?`<span class="dot">${n}</span>`:""}</button>`;
 }
 function wireBell(){
@@ -512,6 +541,7 @@ function renderList(){
     if(!hit) return false;
     if(FILTER==="all") return true;
     if(FILTER==="__warn") return urgent(v).d!==null && urgent(v).d<=WARN_DAYS;
+    if(FILTER==="__miss") return missingInfo(v).length>0;
     return v.khuVuc===FILTER;
   });
   rows.sort((a,b)=>{
@@ -519,8 +549,9 @@ function renderList(){
     if(x===null) return 1; if(y===null) return -1; return x-y;
   });
 
-  if(FILTER!=="all" && FILTER!=="__warn" && !areas.includes(FILTER)) FILTER = "all";
+  if(!["all","__warn","__miss"].includes(FILTER) && !areas.includes(FILTER)) FILTER = "all";
   const alerts = allAlerts();
+  const miss = allMissing();
   const perm = notifyState();
 
   app.innerHTML = `
@@ -533,6 +564,9 @@ function renderList(){
     ${alerts.length ? `<div class="banner red">
       ${alerts.length} giấy tờ còn dưới ${WARN_DAYS} ngày hoặc đã quá hạn.
       <button id="openAlerts">Xem danh sách</button></div>`:""}
+    ${miss.length ? `<div class="banner">
+      ${miss.length} xe còn thiếu thông tin (hạn giấy tờ, số khung, số máy).
+      <button id="openAlerts2">Xem danh sách</button></div>`:""}
     ${alerts.length && perm==="default" ? `<div class="banner">
       Bật thông báo để máy tự nhắc khi còn ${WARN_DAYS} ngày.
       <button id="askN">Bật thông báo</button></div>`:""}
@@ -540,6 +574,7 @@ function renderList(){
     <div class="chips">
       <button class="chip" data-f="all" aria-pressed="${FILTER==="all"}">Tất cả</button>
       <button class="chip" data-f="__warn" aria-pressed="${FILTER==="__warn"}">Sắp hết hạn</button>
+      ${miss.length?`<button class="chip" data-f="__miss" aria-pressed="${FILTER==="__miss"}">Thiếu thông tin (${miss.length})</button>`:""}
       ${areas.map(a=>`<button class="chip" data-f="${esc(a)}" aria-pressed="${FILTER===a}">📍 ${esc(a)}</button>`).join("")}
     </div>
     <div class="list">${
@@ -556,16 +591,19 @@ function renderList(){
   app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
   app.querySelectorAll("[data-go2]").forEach(b=>b.onclick=()=>go(b.dataset.go2));
   const oa = document.getElementById("openAlerts"); if(oa) oa.onclick = alertSheet;
+  const oa2 = document.getElementById("openAlerts2"); if(oa2) oa2.onclick = alertSheet;
   const an = document.getElementById("askN"); if(an) an.onclick = askNotify;
   wireBell();
 }
 
 function docPills(v){
+  const extra = missingInfo(v).length;
   return `<div class="pills">${DOCS.map(D=>{
+    if(naDoc(v,D.key)) return `<span class="pill none" style="opacity:.5">${D.tag} —</span>`;
     const s = docState(daysLeft(v[D.key]));
-    const txt = s.cls==="none" ? "—" : s.cls==="bad" ? `quá ${s.big}n` : `${s.big}n`;
+    const txt = s.cls==="none" ? "thiếu" : s.cls==="bad" ? `quá ${s.big}n` : `${s.big}n`;
     return `<span class="pill ${s.cls}">${D.tag} ${txt}</span>`;
-  }).join("")}</div>`;
+  }).join("")}${extra?`<span class="pill none">⚠ thiếu ${extra}</span>`:""}</div>`;
 }
 function vCard(v){
   const t = urgent(v), img = firstImg(v);
@@ -584,18 +622,21 @@ function vCard(v){
 /* ---- Bảng cảnh báo ---- */
 function alertSheet(){
   const list = allAlerts();
+  const miss = allMissing();
   const perm = notifyState();
   const el = document.createElement("div");
   el.className = "sheet";
   el.innerHTML = `
     <header class="bar"><button class="iconbtn" id="x">✕</button>
-      <h1>Cảnh báo<span class="sub">Còn ≤ ${WARN_DAYS} ngày hoặc đã quá hạn</span></h1></header>
+      <h1>Cảnh báo<span class="sub">Hết hạn ≤ ${WARN_DAYS} ngày · thiếu thông tin</span></h1></header>
     <div class="f">
       ${perm==="granted" ? `<div class="banner" style="margin:0 0 14px">Thông báo đang bật trên máy này.</div>`
         : perm==="denied" ? `<div class="banner" style="margin:0 0 14px">Thông báo đang bị chặn. Mở cài đặt trình duyệt cho trang này để bật lại.</div>`
         : perm==="unsupported" ? "" 
         : `<button class="btn" id="askN2" style="margin-bottom:14px">Bật thông báo trên máy này</button>`}
-      ${list.length ? `<div class="kv">${list.map(a=>{
+      ${list.length||miss.length?"":""}
+      ${list.length ? `<h3 style="font-family:Oswald;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:0 0 9px">Sắp hết hạn / quá hạn</h3>
+        <div class="kv">${list.map(a=>{
         const s = docState(a.d);
         return `<button class="mrow" data-v="${esc(a.v.id)}">
           <span class="tem sm ${s.cls}"><b>${s.big}</b><i>${s.small}</i></span>
@@ -604,8 +645,21 @@ function alertSheet(){
             <span style="display:block;font-size:12.5px;margin-top:5px;font-weight:600">${a.doc.label}</span>
             <span style="display:block;font-size:11.5px;color:var(--ink-3)">Hết hạn ${dmy(a.v[a.doc.key])}</span>
           </span>
-          <span style="color:var(--ink-3)">›</span></button>`; }).join("")}</div>`
-      : `<div class="empty"><div class="ic">✅</div><p>Không có giấy tờ nào sắp hết hạn.</p></div>`}
+          <span style="color:var(--ink-3)">›</span></button>`; }).join("")}</div>` : ""}
+
+      ${miss.length ? `<h3 style="font-family:Oswald;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:${list.length?"22px":"0"} 0 9px">Thiếu thông tin (${miss.length} xe)</h3>
+        <div class="kv">${miss.map(x=>
+          `<button class="mrow" data-v="${esc(x.v.id)}">
+            <span class="tem sm none"><b>${x.thieu.length}</b><i>mục</i></span>
+            <span style="flex:1;min-width:0">
+              <span class="plate sm"><span>${esc(x.v.id)}</span></span>
+              <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:5px">${x.thieu.map(esc).join(" · ")}</span>
+            </span>
+            <span style="color:var(--ink-3)">›</span></button>`).join("")}</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:8px">
+          Xe không cần loại giấy tờ nào thì mở ✎ tick “Không áp dụng”, xe đó sẽ hết bị nhắc.</div>` : ""}
+
+      ${!list.length && !miss.length ? `<div class="empty"><div class="ic">✅</div><p>Không thiếu gì, không có giấy tờ nào sắp hết hạn.</p></div>` : ""}
     </div>`;
   document.body.appendChild(el);
   el.querySelector("#x").onclick = ()=>el.remove();
@@ -653,10 +707,13 @@ async function renderDetail(){
 }
 
 function docRow(v, D){
+  if(naDoc(v,D.key))
+    return `<div class="r"><span class="k">${D.label}</span>
+      <span class="v" style="color:var(--ink-3);font-weight:400">Không áp dụng</span></div>`;
   const d = daysLeft(v[D.key]);
   const s = docState(d);
-  const txt = d===null ? "Chưa nhập" : d<0 ? `Quá hạn ${Math.abs(d)} ngày` : `Còn ${d} ngày`;
-  const cls = s.cls==="bad" ? "neg" : s.cls==="warn" ? "wr" : s.cls==="ok" ? "pos" : "";
+  const txt = d===null ? "⚠ Chưa nhập" : d<0 ? `Quá hạn ${Math.abs(d)} ngày` : `Còn ${d} ngày`;
+  const cls = s.cls==="bad" ? "neg" : s.cls==="warn" ? "wr" : s.cls==="ok" ? "pos" : "wr";
   return `<div class="r"><span class="k">${D.label}</span>
     <span class="v"><span class="${cls}">${txt}</span>
     <span style="display:block;font-size:11.5px;color:var(--ink-3);font-weight:400">
@@ -850,14 +907,20 @@ function renderForm(v){
         <div class="hint">Cách khai thác xe: cho thuê tự lái, có tài xế…</div></div>
 
       <div class="fhead">Đăng kiểm</div>
+      <label class="cbx"><input type="checkbox" id="na_dk" ${(e.khongApDung||[]).includes("hetHanDangKiem")?"checked":""}>
+        Xe này không cần đăng kiểm</label>
       <div class="two">${F("dkm","Lần gần nhất","date",e.dangKiemMoi)}${F("dkh","Hết hạn","date",e.hetHanDangKiem)}</div>
 
       <div class="fhead">Định vị (GPS)</div>
       ${F("dvn","Nhà cung cấp","text",e.nhaMangDinhVi,"Viettel, Bình Anh, Vinasun Tracking…")}
       ${F("dvl","Link trang định vị","text",e.linkDinhVi,"Dán link portal của hãng. App tạo nút mở thẳng ở tab Giấy tờ.")}
+      <label class="cbx"><input type="checkbox" id="na_dv" ${(e.khongApDung||[]).includes("hetHanDinhVi")?"checked":""}>
+        Xe này không gắn định vị</label>
       <div class="two">${F("dvm","Gia hạn gần nhất","date",e.dinhViMoi)}${F("dvh","Hết hạn thuê bao","date",e.hetHanDinhVi)}</div>
 
       <div class="fhead">Phù hiệu</div>
+      <label class="cbx"><input type="checkbox" id="na_ph" ${(e.khongApDung||[]).includes("hetHanPhuHieu")?"checked":""}>
+        Xe này không cần phù hiệu</label>
       ${F("phs","Số phù hiệu","text",e.soPhuHieu)}
       <div class="two">${F("phm","Cấp ngày","date",e.phuHieuMoi)}${F("phh","Hết hạn","date",e.hetHanPhuHieu)}</div>
 
@@ -894,13 +957,19 @@ function renderForm(v){
   document.getElementById("save").onclick = async()=>{
     const g = id => document.getElementById(id).value.trim();
     const n = id => document.getElementById(id).value===""?null:+document.getElementById(id).value;
+    const ck = id => document.getElementById(id).checked;
+    const khongApDung = [
+      ck("na_dk") && "hetHanDangKiem",
+      ck("na_dv") && "hetHanDinhVi",
+      ck("na_ph") && "hetHanPhuHieu"
+    ].filter(Boolean);
     const bs = v ? v.id : g("bs").toUpperCase();
     if(!bs) return alert("Nhập biển số xe đã.");
     if(!v && VEHICLES.some(x=>x.id===bs)) return alert("Biển số này đã có trong đội xe rồi.");
     await saveVehicle({
       id:bs, hangXe:g("hx"), soCho:n("sc"), loaiXe:g("lx"),
       namSX:n("ns"), khuVuc:g("kv"), dungGiayTo:g("dgt"), hinhThuc:g("ht"), linkDrive:g("drv"),
-      dangKiemMoi:g("dkm"), hetHanDangKiem:g("dkh"),
+      khongApDung, dangKiemMoi:g("dkm"), hetHanDangKiem:g("dkh"),
       nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:g("dvm"), hetHanDinhVi:g("dvh"),
       soPhuHieu:g("phs"), phuHieuMoi:g("phm"), hetHanPhuHieu:g("phh"),
       vin:g("vin"), soMay:g("sm"), caVet:g("cv"),
