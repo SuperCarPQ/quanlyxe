@@ -1,5 +1,5 @@
 /* Đổi VERSION mỗi lần deploy bản mới -> máy người dùng tự nhận ra */
-const VERSION = "1.5.0";
+const VERSION = "1.7.0";
 const CACHE = `qlx-${VERSION}`;
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
