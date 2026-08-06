@@ -172,6 +172,16 @@ a{color:inherit}
 .nav button .ic{display:block;font-size:19px;margin-bottom:1px}
 .nav button[aria-current="page"]{color:var(--ink);font-weight:600}
 
+.paybar{
+  margin:12px var(--pad) 0;background:var(--ink);color:#fff;
+  border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:14px;
+  width:calc(100% - var(--pad)*2);text-align:left;
+}
+.paybar:hover{opacity:.93}
+.paybar .lb{font-family:'Oswald',sans-serif;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#8D949E}
+.paybar .vl{font-family:'Oswald',sans-serif;font-size:24px;font-weight:600;margin-top:2px;color:var(--plate)}
+.paybar .sb{font-size:11.5px;color:#9AA1AA;margin-top:2px}
+@media (min-width:900px){.paybar{max-width:1120px;margin:14px auto 0}}
 .empty{text-align:center;padding:56px 28px;color:var(--ink-3)}
 .empty .ic{font-size:40px;opacity:.35}
 .empty p{margin:10px 0 18px;font-size:14px}
@@ -267,7 +277,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "1.5.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "1.7.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -308,7 +318,8 @@ const DEMO = [
     linkDinhVi:"https://etracking.viettel.vn/", 
     hetHanPhuHieu:"2026-08-09", phuHieuMoi:"2025-08-09", soPhuHieu:"PH-68-004521",
     ghiChuPhapLy:"Sang tên xong 9/2023", phuongThucMua:"Trả góp",
-    soTienVay:500000000, traTruoc:350000000,
+    soTienVay:500000000, traTruoc:350000000, traGopThang:11200000, ngayDong:5,
+    daTraNganHang:112000000, duNoConLai:402000000, ngayCapNhatNo:"2026-07-31",
     khuVuc:"Phú Quốc", linkDrive:"",
     hinhThuc:"Cho thuê tự lái", dungGiayTo:"Công ty TNHH", caVet:"Ngân hàng giữ", anh:[] },
   { id:"68A-678.90", soCho:5, loaiXe:"Ô tô 4 chỗ", hangXe:"Kia",
@@ -318,7 +329,7 @@ const DEMO = [
     linkDinhVi:"", 
     hetHanPhuHieu:"2027-01-20", phuHieuMoi:"2026-01-20", soPhuHieu:"PH-68-003310",
     ghiChuPhapLy:"", phuongThucMua:"Trả thẳng",
-    soTienVay:0, traTruoc:390000000,
+    soTienVay:0, traTruoc:390000000, traGopThang:0, ngayDong:null,
     khuVuc:"Phú Quốc", linkDrive:"",
     hinhThuc:"Cho thuê tự lái", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] },
   { id:"68B-222.11", soCho:2, loaiXe:"Xe máy", hangXe:"Honda",
@@ -326,7 +337,7 @@ const DEMO = [
     hetHanDangKiem:"", dangKiemMoi:"", hetHanDinhVi:"", dinhViMoi:"", nhaMangDinhVi:"", linkDinhVi:"",
     hetHanPhuHieu:"", phuHieuMoi:"", soPhuHieu:"",
     khongApDung:["hetHanDangKiem","hetHanPhuHieu","hetHanDinhVi"],
-    ghiChuPhapLy:"", phuongThucMua:"Trả thẳng", soTienVay:0, traTruoc:34000000,
+    ghiChuPhapLy:"", phuongThucMua:"Trả thẳng", soTienVay:0, traTruoc:34000000, traGopThang:0, ngayDong:null,
     khuVuc:"TP.HCM", linkDrive:"",
     hinhThuc:"Cho thuê xe máy", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] }
 ];
@@ -395,6 +406,12 @@ function docState(d){
   if(d <= WARN_DAYS) return { cls:"warn", big:d, small:"ngày" };
   return { cls:"ok", big:d, small:"ngày" };
 }
+/* Các khoản phải đóng cố định hàng tháng */
+const phaiDong = () => VEHICLES
+  .filter(v => +v.traGopThang > 0)
+  .sort((a,b) => (a.ngayDong||99) - (b.ngayDong||99));
+const tongPhaiDong = () => phaiDong().reduce((s,v)=>s+(+v.traGopThang||0), 0);
+
 /* Giấy tờ không áp dụng cho xe này (vd xe máy không cần đăng kiểm, phù hiệu) */
 const naDoc = (v, key) => (v.khongApDung||[]).includes(key);
 
@@ -570,6 +587,14 @@ function renderList(){
     ${alerts.length && perm==="default" ? `<div class="banner">
       Bật thông báo để máy tự nhắc khi còn ${WARN_DAYS} ngày.
       <button id="askN">Bật thông báo</button></div>`:""}
+    ${tongPhaiDong() ? `<button class="paybar" id="payBtn">
+      <span style="flex:1">
+        <span class="lb">Phải đóng hàng tháng</span>
+        <span class="vl">${money(tongPhaiDong())} đ</span>
+        <span class="sb">${phaiDong().length} xe đang trả góp${
+          phaiDong()[0]?.ngayDong ? ` · gần nhất ngày ${phaiDong()[0].ngayDong}` : ""}</span>
+      </span>
+      <span style="color:#9AA1AA;font-size:20px">›</span></button>`:""}
     <div class="search"><input id="q" placeholder="Tìm biển số, hãng, VIN, số phù hiệu…" value="${esc(Q)}"></div>
     <div class="chips">
       <button class="chip" data-f="all" aria-pressed="${FILTER==="all"}">Tất cả</button>
@@ -592,6 +617,7 @@ function renderList(){
   app.querySelectorAll("[data-go2]").forEach(b=>b.onclick=()=>go(b.dataset.go2));
   const oa = document.getElementById("openAlerts"); if(oa) oa.onclick = alertSheet;
   const oa2 = document.getElementById("openAlerts2"); if(oa2) oa2.onclick = alertSheet;
+  const pb = document.getElementById("payBtn"); if(pb) pb.onclick = paySheet;
   const an = document.getElementById("askN"); if(an) an.onclick = askNotify;
   wireBell();
 }
@@ -664,6 +690,46 @@ function alertSheet(){
   document.body.appendChild(el);
   el.querySelector("#x").onclick = ()=>el.remove();
   const a2 = el.querySelector("#askN2"); if(a2) a2.onclick = async()=>{ await askNotify(); el.remove(); alertSheet(); };
+  el.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{ el.remove(); go("detail", b.dataset.v); });
+}
+
+/* ---- Bảng các khoản phải đóng hàng tháng ---- */
+function paySheet(){
+  const list = phaiDong();
+  const tong = tongPhaiDong();
+  const homNay = new Date().getDate();
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>Phải đóng hàng tháng<span class="sub">${list.length} xe đang trả góp</span></h1></header>
+    <div class="f">
+      <div class="stat" style="margin-bottom:14px">
+        <div class="lb">Tổng mỗi tháng</div>
+        <div class="vl">${money(tong)} đ</div>
+      </div>
+      ${list.length ? `<div class="kv">${list.map(v=>{
+        const nd = +v.ngayDong || null;
+        const sapDen = nd && nd>=homNay && nd-homNay<=5;
+        const quaRoi = nd && nd<homNay;
+        return `<button class="mrow" data-v="${esc(v.id)}">
+          <span class="mtag" style="${sapDen?"border-color:var(--warn);color:var(--warn)":""}">
+            ${nd?`<b style="${sapDen?"color:var(--warn)":""}">${nd}</b>hàng<br>tháng`:`<b>—</b>chưa<br>rõ`}</span>
+          <span style="flex:1;min-width:0">
+            <span class="plate sm"><span>${esc(v.id)}</span></span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:5px">
+              ${esc(v.hangXe||"")}${v.khuVuc?` · ${esc(v.khuVuc)}`:""}${
+                nd ? (sapDen?" · sắp tới hạn":quaRoi?" · tháng này đã qua ngày đóng":"") : ""}</span>
+          </span>
+          <span class="v num">${money(v.traGopThang)}</span>
+        </button>`; }).join("")}</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px">
+          Đây là số cố định khai ở từng xe, không phải số đã đóng thực tế.
+          Số thực tế nhập ở tab Theo tháng của mỗi xe.</div>`
+      : `<div class="empty"><div class="ic">✅</div><p>Không xe nào đang trả góp.</p></div>`}
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
   el.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{ el.remove(); go("detail", b.dataset.v); });
 }
 
@@ -773,7 +839,6 @@ function tabFin(v){
   const vay = +v.soTienVay||0, tt = +v.traTruoc||0;
   const all = MONTHLY[v.id]||[];
   const tra = all.reduce((s,m)=>s+(+m.nganHang||0),0);
-  const conLai = Math.max(0, vay - tra);
   const lai = all.reduce((s,m)=>s+profit(m),0);
   return `<div class="secs">
   <div class="sec"><h3>Mua xe</h3><div class="kv">
@@ -783,9 +848,12 @@ function tabFin(v){
     <div class="r"><span class="k">Trả trước</span><span class="v num">${money(tt)}</span></div>
     <div class="r"><span class="k">Số tiền vay</span><span class="v num">${money(vay)}</span></div>
   </div></div>
-  ${vay>0?`<div class="sec"><h3>Dư nợ</h3><div class="kv">
+  ${(vay>0 || +v.traGopThang>0)?`<div class="sec"><h3>Trả góp</h3><div class="kv">
+    ${+v.traGopThang>0?`<div class="r"><span class="k">Phải đóng mỗi tháng</span><span class="v num">${money(v.traGopThang)}</span></div>`:""}
+    ${v.ngayDong?`<div class="r"><span class="k">Ngày đóng</span><span class="v">Ngày ${v.ngayDong} hàng tháng</span></div>`:""}
     <div class="r"><span class="k">Đã trả ngân hàng</span><span class="v num">${money(tra)}</span></div>
     <div class="r"><span class="k">Còn lại (ước tính)</span><span class="v num ${conLai>0?"neg":"pos"}">${money(conLai)}</span></div>
+    ${(+v.traGopThang>0 && conLai>0)?`<div class="r"><span class="k">Còn khoảng</span><span class="v num">${Math.ceil(conLai/(+v.traGopThang))} kỳ</span></div>`:""}
   </div><div class="hint" style="font-size:11.5px;color:var(--ink-3);margin-top:6px">
     Tính từ tổng cột “Ngân hàng” các tháng đã nhập — chưa tính lãi.</div></div>`:""}
   <div class="sec full"><h3>Luỹ kế toàn thời gian</h3><div class="kv">
@@ -843,7 +911,8 @@ function monthSheet(v, m){
         <input type="number" inputmode="numeric" id="cp" value="${m?.chiPhi??""}">
         <div class="hint">Xăng, rửa xe, bảo dưỡng, phí định vị, vá lốp…</div></div>
       <div class="fg"><label>Trả ngân hàng (VNĐ)</label>
-        <input type="number" inputmode="numeric" id="nh" value="${m?.nganHang??""}"></div>
+        <input type="number" inputmode="numeric" id="nh" value="${m ? (m.nganHang??"") : (+v.traGopThang||"")}">
+        ${!m && +v.traGopThang>0?`<div class="hint">Điền sẵn theo mức trả góp cố định. Sửa lại nếu tháng này đóng khác.</div>`:""}</div>
       <div class="fg"><label>Ghi chú</label><textarea id="gc">${esc(m?.ghiChu||"")}</textarea></div>
       <div class="kv" style="margin-bottom:14px"><div class="r">
         <span class="k">Lợi nhuận tháng</span><span class="v num" id="lp">—</span></div></div>
@@ -936,6 +1005,15 @@ function renderForm(v){
         <select id="pt">${["Trả thẳng","Trả góp","Thuê tài chính","Khác"].map(o=>
           `<option ${e.phuongThucMua===o?"selected":""}>${o}</option>`).join("")}</select></div>
       <div class="two">${F("tt","Trả trước (VNĐ)","number",e.traTruoc)}${F("vay","Số tiền vay (VNĐ)","number",e.soTienVay)}</div>
+      <div class="two">
+        ${F("tg","Trả góp mỗi tháng (VNĐ)","number",e.traGopThang,"Số cố định phải đóng hàng tháng.")}
+        ${F("nd","Ngày đóng","number",e.ngayDong,"Ngày mấy hàng tháng (1–31).")}
+      </div>
+      <div class="two">
+        ${F("dtr","Đã trả ngân hàng (VNĐ)","number",e.daTraNganHang)}
+        ${F("dno","Dư nợ còn lại (VNĐ)","number",e.duNoConLai)}
+      </div>
+      ${F("ncn","Cập nhật số nợ ngày","date",e.ngayCapNhatNo,"Lấy theo sao kê ngân hàng. Tự gõ, app không tính.")}
 
       <div class="fhead">Hồ sơ &amp; hình ảnh</div>
       <div class="fg"><label>Link thư mục Google Drive</label>
@@ -974,7 +1052,10 @@ function renderForm(v){
       soPhuHieu:g("phs"), phuHieuMoi:g("phm"), hetHanPhuHieu:g("phh"),
       vin:g("vin"), soMay:g("sm"), caVet:g("cv"),
       ngayMua:g("nm"), giaMua:n("gm"), phuongThucMua:document.getElementById("pt").value,
-      traTruoc:n("tt"), soTienVay:n("vay"), ghiChuPhapLy:g("gc"),
+      traTruoc:n("tt"), soTienVay:n("vay"),
+      traGopThang:n("tg"), ngayDong:n("nd"),
+      daTraNganHang:n("dtr"), duNoConLai:n("dno"), ngayCapNhatNo:g("ncn"),
+      ghiChuPhapLy:g("gc"),
       anh:g("anh").split("\n").map(s=>s.trim()).filter(Boolean)
     });
     go("detail", bs);
