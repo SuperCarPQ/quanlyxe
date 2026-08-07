@@ -135,6 +135,17 @@ a{color:inherit}
 .mtag b{display:block;font-size:15px;color:var(--ink)}
 
 /* ---------- Dashboard ---------- */
+.revrow{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--line)}
+.revrow:last-child{border-bottom:none}
+.rvname{flex:1;min-width:0}
+.rvname>span:last-child{display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px}
+.revin{width:132px;flex:0 0 auto;text-align:right;background:var(--bg);
+  border:1px solid var(--line);border-radius:9px;padding:9px 10px;font-size:14.5px;
+  font-family:'Oswald',sans-serif;font-weight:600}
+.revin:focus{outline:2px solid var(--ink);outline-offset:-1px;background:var(--card)}
+.revin.saving{opacity:.5}
+.revin.saved{border-color:var(--ok);background:#E4F3EA}
+@media (min-width:900px){.revin{width:170px}}
 .mpick{display:flex;align-items:center;justify-content:space-between;gap:10px;
   background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px}
 .mpick span{flex:1;text-align:center;font-size:13.5px;color:var(--ink-2)}
@@ -264,6 +275,7 @@ a{color:inherit}
   <div class="brand"><img class="mark" src="logo-mark.png" alt="Peaktime Supercar"></div>
   <button data-go="list" aria-current="page"><span class="ic">🚗</span>Tổng quan</button>
   <button data-go="fin"><span class="ic">💰</span>Tài chính</button>
+  <button data-go="rev"><span class="ic">💵</span>Doanh thu</button>
   <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
 </nav>
 
@@ -281,7 +293,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.2.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.3.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -368,6 +380,22 @@ async function loadMonthly(vid){
   MONTHLY[vid] = snap.docs.map(d=>({ id:d.id, ...d.data() })).sort((a,b)=>b.id.localeCompare(a.id));
   return MONTHLY[vid];
 }
+let SHEETS = LIVE ? [] : [
+  { ten:"Doanh thu Phú Quốc 2026", url:"https://docs.google.com/spreadsheets/d/vd1", khuVuc:"Phú Quốc" },
+  { ten:"Doanh thu TP.HCM 2026",  url:"https://docs.google.com/spreadsheets/d/vd2", khuVuc:"TP.HCM" }
+];
+async function loadSheets(){
+  if(!LIVE) return SHEETS;
+  try{
+    const d = await FS.getDoc(FS.doc(db,"config","sheets"));
+    SHEETS = d.exists() ? (d.data().links || []) : [];
+  }catch{ SHEETS = []; }
+  return SHEETS;
+}
+async function saveSheets(){
+  if(LIVE) await FS.setDoc(FS.doc(db,"config","sheets"), { links: SHEETS });
+}
+
 async function loadAllMonthly(){
   if(!LIVE) return;
   await Promise.all(VEHICLES.filter(v=>!MONTHLY[v.id]).map(v=>loadMonthly(v.id)));
@@ -544,6 +572,7 @@ function go(name, id=null, tab="info"){
 function render(){
   if(VIEW.name==="list") return renderList();
   if(VIEW.name==="fin")  return renderFin();
+  if(VIEW.name==="rev")  return renderRev();
   if(VIEW.name==="new")  return renderForm(null);
   if(VIEW.name==="edit") return renderForm(VEHICLES.find(v=>v.id===VIEW.id));
   if(VIEW.name==="detail") return renderDetail();
@@ -751,28 +780,22 @@ function shiftMonth(id, delta){
 }
 
 async function renderFin(){
-  await loadAllMonthly();
-  const M = FIN_M || thisMonth();
-  const laMoiNhat = M >= thisMonth();
-
-  const rows = VEHICLES.map(v=>{
-    const m = (MONTHLY[v.id]||[]).find(x=>x.id===M);
-    return { v, m, p: m ? profit(m) : null };
-  });
-  const co = rows.filter(r=>r.m);
-  const thieu = rows.filter(r=>!r.m);
-
-  const thu  = co.reduce((s,r)=>s+(+r.m.doanhThu||0),0);
-  const chi  = co.reduce((s,r)=>s+(+r.m.chiPhi||0),0);
-  const nh   = co.reduce((s,r)=>s+(+r.m.nganHang||0),0);
-  const loi  = thu - chi - nh;
-
   const tongGiaMua = VEHICLES.reduce((s,v)=>s+(+v.giaMua||0),0);
   const tongDuNo   = VEHICLES.reduce((s,v)=>s+(+v.duNoConLai||0),0);
   const tongGop    = tongPhaiDong();
-  const xep = co.slice().sort((a,b)=>b.p-a.p);
 
-  const nam = M.slice(0,4), thang = +M.slice(5);
+  // gom xe theo khu vực
+  const kv = {};
+  for(const v of VEHICLES){
+    const a = v.khuVuc || "Chưa xếp khu vực";
+    (kv[a] || (kv[a] = [])).push(v);
+  }
+  const khuVucs = Object.entries(kv).map(([ten, xe])=>({
+    ten, xe,
+    giaMua: xe.reduce((s,v)=>s+(+v.giaMua||0),0),
+    duNo:   xe.reduce((s,v)=>s+(+v.duNoConLai||0),0),
+    gop:    xe.reduce((s,v)=>s+(+v.traGopThang||0),0)
+  })).sort((a,b)=>b.duNo-a.duNo || b.xe.length-a.xe.length);
 
   app.innerHTML = `
     <header class="bar">
@@ -782,29 +805,20 @@ async function renderFin(){
     </header>
 
     <div class="sec inner">
-      <div class="mpick">
-        <button id="mPrev" aria-label="Tháng trước">‹</button>
-        <span><b>Tháng ${thang}</b> / ${nam}</span>
-        <button id="mNext" aria-label="Tháng sau" ${laMoiNhat?'disabled':''}>›</button>
-      </div>
-
-      <div class="stat" style="margin:11px 0">
-        <div class="lb">Lợi nhuận tháng ${thang}</div>
-        <div class="vl ${loi>=0?"v pos":"v neg"}">${money(loi)} đ</div>
+      <div class="stat" style="margin-bottom:11px">
+        <div class="lb">Phải đóng mỗi tháng</div>
+        <div class="vl">${money(tongGop)} đ</div>
         <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">
-          ${co.length}/${VEHICLES.length} xe đã nhập số liệu</div>
+          ${phaiDong().length} xe đang trả góp</div>
       </div>
-
       <div class="grid2">
-        <div class="stat"><div class="lb">Doanh thu</div><div class="vl">${money(thu)}</div></div>
-        <div class="stat"><div class="lb">Chi vận hành</div><div class="vl">${money(chi)}</div></div>
-        <div class="stat"><div class="lb">Đã trả ngân hàng</div><div class="vl">${money(nh)}</div></div>
-        <div class="stat"><div class="lb">Phải đóng/tháng</div><div class="vl">${money(tongGop)}</div></div>
+        <div class="stat"><div class="lb">Tổng giá mua</div><div class="vl">${money(tongGiaMua)}</div></div>
+        <div class="stat"><div class="lb">Tổng dư nợ</div><div class="vl ${tongDuNo>0?"v neg":"v pos"}">${money(tongDuNo)}</div></div>
       </div>
     </div>
 
     <div class="secs">
-      <div class="sec"><h3>Vốn &amp; nợ</h3><div class="kv">
+      <div class="sec"><h3>Xem chi tiết theo xe</h3><div class="kv">
         <button class="mrow" data-no="giaMua">
           <span class="k" style="flex:1">Tổng giá mua đội xe</span>
           <span class="v num">${money(tongGiaMua)}</span><span style="color:var(--ink-3)">›</span></button>
@@ -814,32 +828,30 @@ async function renderFin(){
         <button class="mrow" data-no="traGopThang">
           <span class="k" style="flex:1">Phải đóng mỗi tháng</span>
           <span class="v num">${money(tongGop)}</span><span style="color:var(--ink-3)">›</span></button>
-      </div>
-      <div style="font-size:11.5px;color:var(--ink-3);margin-top:7px">
-        Bấm vào từng dòng để xem xe nào đang góp bao nhiêu.</div></div>
+      </div></div>
 
-      ${xep.length?`<div class="sec"><h3>Lãi lỗ từng xe — tháng ${thang}</h3><div class="kv">${xep.map(r=>
-        `<button class="mrow" data-v="${esc(r.v.id)}">
-          <span style="flex:1;min-width:0">
-            <span class="plate sm"><span>${esc(r.v.id)}</span></span>
-            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
-              Thu ${money(r.m.doanhThu)} · Chi ${money(r.m.chiPhi)} · NH ${money(r.m.nganHang)}</span>
-          </span>
-          <span class="v num ${r.p>=0?"pos":"neg"}">${money(r.p)}</span>
-        </button>`).join("")}</div></div>`:""}
-
-      ${thieu.length?`<div class="sec"><h3>Chưa nhập tháng ${thang} (${thieu.length} xe)</h3><div class="kv">${thieu.map(r=>
-        `<button class="mrow" data-v="${esc(r.v.id)}">
-          <span style="flex:1"><span class="plate sm"><span>${esc(r.v.id)}</span></span></span>
-          <span style="color:var(--ink-3);font-size:12.5px">Nhập ›</span></button>`).join("")}</div></div>`:""}
+      ${khuVucs.map(k=>`<div class="sec"><h3>${esc(k.ten)} — ${k.xe.length} xe</h3>
+        <div class="kv">
+          <div class="r"><span class="k">Giá mua</span><span class="v num">${money(k.giaMua)}</span></div>
+          <div class="r"><span class="k">Dư nợ còn lại</span><span class="v num ${k.duNo>0?"neg":"pos"}">${money(k.duNo)}</span></div>
+          <div class="r"><span class="k">Phải đóng/tháng</span><span class="v num">${money(k.gop)}</span></div>
+        </div>
+        <div class="kv" style="margin-top:8px">${k.xe.map(v=>
+          `<button class="mrow" data-v="${esc(v.id)}">
+            <span style="flex:1;min-width:0">
+              <span class="plate sm"><span>${esc(v.id)}</span></span>
+              <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
+                ${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}${
+                  +v.traGopThang>0?` · góp ${money(v.traGopThang)}/th`:" · không trả góp"}</span>
+            </span>
+            <span class="v num ${+v.duNoConLai>0?"neg":""}">${+v.duNoConLai>0?money(v.duNoConLai):"—"}</span>
+          </button>`).join("")}</div>
+      </div>`).join("")}
     </div>
 
     ${!VEHICLES.length?`<div class="empty"><div class="ic">💰</div><p>Thêm xe rồi số liệu sẽ hiện ở đây.</p></div>`:""}
     <div style="height:24px"></div>`;
 
-  document.getElementById("mPrev").onclick = ()=>{ FIN_M = shiftMonth(M,-1); renderFin(); };
-  const nx = document.getElementById("mNext");
-  if(nx && !nx.disabled) nx.onclick = ()=>{ FIN_M = shiftMonth(M, 1); renderFin(); };
   app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
   const NO = { giaMua:["Giá mua đội xe","Từng xe mua bao nhiêu"],
                duNoConLai:["Dư nợ còn lại","Số nợ ngân hàng đang còn"],
@@ -848,6 +860,161 @@ async function renderFin(){
     const f = b.dataset.no; noSheet(f, NO[f][0], NO[f][1]);
   });
   wireBell();
+}
+
+
+/* ---- Doanh thu xe hàng tháng ---- */
+let REV_M = null;
+
+async function renderRev(){
+  await loadAllMonthly();
+  await loadSheets();
+  const M = REV_M || thisMonth();
+  const laMoiNhat = M >= thisMonth();
+  const nam = M.slice(0,4), thang = +M.slice(5);
+
+  const getRev = v => {
+    const m = (MONTHLY[v.id]||[]).find(x=>x.id===M);
+    return m && (m.doanhThu||m.doanhThu===0) ? +m.doanhThu : null;
+  };
+
+  const kv = {};
+  for(const v of VEHICLES){
+    const a = v.khuVuc || "Chưa xếp khu vực";
+    (kv[a] || (kv[a] = [])).push(v);
+  }
+  const nhom = Object.entries(kv).map(([ten, xe])=>({
+    ten, xe,
+    thu: xe.reduce((s,v)=>s+(getRev(v)||0),0),
+    daNhap: xe.filter(v=>getRev(v)!==null).length
+  })).sort((a,b)=>b.thu-a.thu);
+
+  const tong = nhom.reduce((s,n)=>s+n.thu,0);
+  const daNhap = nhom.reduce((s,n)=>s+n.daNhap,0);
+
+  app.innerHTML = `
+    <header class="bar">
+      ${LOGO}
+      <h1>Doanh thu<span class="sub">Theo tháng · ${VEHICLES.length} xe</span></h1>
+      ${bellBtn()}
+    </header>
+
+    <div class="sec inner">
+      <div class="mpick">
+        <button id="rPrev" aria-label="Tháng trước">‹</button>
+        <span><b>Tháng ${thang}</b> / ${nam}</span>
+        <button id="rNext" aria-label="Tháng sau" ${laMoiNhat?'disabled':''}>›</button>
+      </div>
+      <div class="stat" style="margin-top:11px">
+        <div class="lb">Tổng doanh thu tháng ${thang}</div>
+        <div class="vl">${money(tong)} đ</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">
+          ${daNhap}/${VEHICLES.length} xe đã nhập</div>
+      </div>
+    </div>
+
+    <div class="secs">
+      ${nhom.map(n=>`<div class="sec">
+        <h3>${esc(n.ten)} — ${money(n.thu)} đ</h3>
+        <div class="kv">${n.xe.map(v=>{
+          const r = getRev(v);
+          return `<div class="revrow">
+            <span class="rvname">
+              <span class="plate sm"><span>${esc(v.id)}</span></span>
+              <span>${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</span>
+            </span>
+            <input class="revin" type="number" inputmode="numeric" data-v="${esc(v.id)}"
+                   value="${r===null?"":r}" placeholder="0">
+          </div>`; }).join("")}</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:6px">
+          ${n.daNhap}/${n.xe.length} xe đã nhập</div>
+      </div>`).join("")}
+
+      <div class="sec full"><h3>Nguồn dữ liệu — Google Sheets</h3>
+        <div class="kv">${
+          SHEETS.length ? SHEETS.map((k,i)=>
+            `<div class="drive">
+              <span class="dic">📊</span>
+              <a class="dtx" href="${esc(k.url)}" target="_blank" rel="noopener" style="text-decoration:none">
+                <b>${esc(k.ten)}</b><span>${k.khuVuc?esc(k.khuVuc)+" · ":""}${esc(k.url)}</span></a>
+              <button class="iconbtn" data-del="${i}" style="color:var(--bad);font-size:15px">✕</button>
+            </div>`).join("")
+          : `<div class="r"><span class="k">Chưa gắn sheet nào.</span></div>`
+        }</div>
+        <div style="height:10px"></div>
+        <button class="btn ghost" id="addSheet">＋ Thêm link Google Sheet</button>
+      </div>
+    </div>
+
+    ${!VEHICLES.length?`<div class="empty"><div class="ic">💵</div><p>Thêm xe rồi nhập doanh thu ở đây.</p></div>`:""}
+    <div style="height:24px"></div>`;
+
+  document.getElementById("rPrev").onclick = ()=>{ REV_M = shiftMonth(M,-1); renderRev(); };
+  const nx = document.getElementById("rNext");
+  if(nx && !nx.disabled) nx.onclick = ()=>{ REV_M = shiftMonth(M,1); renderRev(); };
+
+  // nhập tới đâu lưu tới đó
+  app.querySelectorAll(".revin").forEach(inp=>{
+    inp.onchange = async ()=>{
+      const val = inp.value === "" ? null : +inp.value;
+      inp.classList.add("saving");
+      try{
+        await saveMonth(inp.dataset.v, { id:M, doanhThu: val===null ? 0 : val });
+        inp.classList.remove("saving"); inp.classList.add("saved");
+        setTimeout(()=>inp.classList.remove("saved"), 1200);
+        capNhatTong();
+      }catch(e){
+        inp.classList.remove("saving");
+        alert("Không lưu được: " + e.message);
+      }
+    };
+  });
+
+  function capNhatTong(){
+    const t = [...app.querySelectorAll(".revin")].reduce((s,i)=>s+(+i.value||0),0);
+    const el = app.querySelector(".stat .vl");
+    if(el) el.textContent = money(t) + " đ";
+  }
+
+  app.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{
+    const i = +b.dataset.del;
+    if(!confirm(`Xoá link "${SHEETS[i].ten}"?`)) return;
+    SHEETS.splice(i,1); await saveSheets(); renderRev();
+  });
+  const add = document.getElementById("addSheet");
+  if(add) add.onclick = sheetForm;
+  wireBell();
+}
+
+function sheetForm(){
+  const areas = [...new Set(VEHICLES.map(v=>v.khuVuc).filter(Boolean))].sort();
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>Thêm link Google Sheet</h1></header>
+    <div class="f">
+      <div class="fg"><label>Tên gọi</label>
+        <input id="stTen" placeholder="Doanh thu Phú Quốc 2026"></div>
+      <div class="fg"><label>Đường dẫn</label>
+        <input id="stUrl" placeholder="https://docs.google.com/spreadsheets/d/...">
+        <div class="hint">Mở sheet, bấm Chia sẻ → Sao chép đường liên kết, rồi dán vào đây.</div></div>
+      <div class="fg"><label>Khu vực (nếu sheet chỉ của một khu vực)</label>
+        <input id="stKv" list="stKvList" placeholder="Để trống nếu dùng chung">
+        <datalist id="stKvList">${areas.map(a=>`<option value="${esc(a)}">`).join("")}</datalist></div>
+      <button class="btn" id="stSave">Lưu link</button>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+  el.querySelector("#stSave").onclick = async()=>{
+    const ten = el.querySelector("#stTen").value.trim();
+    const url = el.querySelector("#stUrl").value.trim();
+    if(!ten || !url) return alert("Nhập đủ tên và đường dẫn.");
+    if(!/^https?:\/\//i.test(url)) return alert("Đường dẫn phải bắt đầu bằng https://");
+    SHEETS.push({ ten, url, khuVuc: el.querySelector("#stKv").value.trim() });
+    await saveSheets();
+    el.remove(); renderRev();
+  };
 }
 
 /* ---- Bóc tách vốn & nợ theo từng xe ---- */
@@ -909,7 +1076,6 @@ async function renderDetail(){
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" data-t="info" aria-selected="${VIEW.tab==="info"}">Giấy tờ &amp; xe</button>
       <button class="tab" role="tab" data-t="fin"  aria-selected="${VIEW.tab==="fin"}">Tài chính</button>
-      <button class="tab" role="tab" data-t="mon"  aria-selected="${VIEW.tab==="mon"}">Theo tháng</button>
     </div>
     <div id="tabbody"></div>`;
 
@@ -919,7 +1085,7 @@ async function renderDetail(){
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ VIEW.tab=b.dataset.t; renderDetail(); });
   try{
     document.getElementById("tabbody").innerHTML =
-      VIEW.tab==="info" ? tabInfo(v) : VIEW.tab==="fin" ? tabFin(v) : tabMonthly(v);
+      VIEW.tab==="fin" ? tabFin(v) : tabInfo(v);
   }catch(err){
     console.error("Lỗi hiển thị tab:", err);
     document.getElementById("tabbody").innerHTML =
@@ -994,9 +1160,6 @@ function tabInfo(v){
 
 function tabFin(v){
   const vay = +v.soTienVay||0, tt = +v.traTruoc||0;
-  const all = MONTHLY[v.id]||[];
-  const tra = all.reduce((s,m)=>s+(+m.nganHang||0),0);
-  const lai = all.reduce((s,m)=>s+profit(m),0);
   return `<div class="secs">
   <div class="sec"><h3>Mua xe</h3><div class="kv">
     <div class="r"><span class="k">Ngày mua</span><span class="v">${dmy(v.ngayMua)}</span></div>
@@ -1011,32 +1174,9 @@ function tabFin(v){
     ${(v.daTraNganHang||v.daTraNganHang===0)?`<div class="r"><span class="k">Đã trả ngân hàng</span><span class="v num">${money(v.daTraNganHang)}</span></div>`:""}
     ${(v.duNoConLai||v.duNoConLai===0)?`<div class="r"><span class="k">Dư nợ còn lại</span><span class="v num ${+v.duNoConLai>0?"neg":"pos"}">${money(v.duNoConLai)}</span></div>`:""}
     ${v.ngayCapNhatNo?`<div class="r"><span class="k">Cập nhật ngày</span><span class="v">${dmy(v.ngayCapNhatNo)}</span></div>`:""}
-  </div></div>`:""}
-  <div class="sec full"><h3>Luỹ kế toàn thời gian</h3><div class="kv">
-    <div class="r"><span class="k">Tổng doanh thu</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.doanhThu||0),0))}</span></div>
-    <div class="r"><span class="k">Tổng chi vận hành</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.chiPhi||0),0))}</span></div>
-    <div class="r"><span class="k">Tổng trả ngân hàng</span><span class="v num">${money(tra)}</span></div>
-    <div class="r"><span class="k">Lợi nhuận luỹ kế</span><span class="v num ${lai>=0?"pos":"neg"}">${money(lai)}</span></div>
-  </div></div></div>`;
+  </div></div>`:""}</div>`;
 }
 
-function tabMonthly(v){
-  const arr = MONTHLY[v.id]||[];
-  return `<div class="secs">
-  <div class="sec full"><button class="btn" id="addm">＋ Nhập số liệu tháng</button></div>
-  <div class="sec full"><h3>Lịch sử ${arr.length?`(${arr.length} tháng)`:""}</h3>
-    ${arr.length ? `<div class="kv">${arr.map(m=>{
-      const p = profit(m), L = monthLabel(m.id);
-      return `<button class="mrow" data-m="${m.id}">
-        <span class="mtag"><b>${L.m}</b>${L.y}</span>
-        <span style="flex:1;min-width:0">
-          <span style="display:block;font-family:'Oswald';font-size:17px;font-weight:600" class="${p>=0?"v pos":"v neg"}">${money(p)}</span>
-          <span style="display:block;font-size:11.5px;color:var(--ink-3)">Thu ${money(m.doanhThu)} · Chi ${money(m.chiPhi)} · NH ${money(m.nganHang)}</span>
-        </span>
-        <span style="color:var(--ink-3)">›</span></button>`; }).join("")}</div>`
-    : `<div class="kv"><div class="r"><span class="k">Chưa có tháng nào. Cuối tháng nhập 3 số: doanh thu, chi phí, tiền ngân hàng.</span></div></div>`}
-  </div></div>`;
-}
 
 function wireTab(v){
   const del = document.getElementById("del");
@@ -1044,58 +1184,8 @@ function wireTab(v){
     if(!confirm(`Xoá xe ${v.id} và toàn bộ số liệu tháng?`)) return;
     await removeVehicle(v.id); go("list");
   };
-  const addm = document.getElementById("addm");
-  if(addm) addm.onclick = ()=>monthSheet(v, null);
-  app.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>
-    monthSheet(v, (MONTHLY[v.id]||[]).find(x=>x.id===b.dataset.m)));
 }
 
-/* ---- Nhập tháng ---- */
-function monthSheet(v, m){
-  const el = document.createElement("div");
-  el.className = "sheet";
-  el.innerHTML = `
-    <header class="bar"><button class="iconbtn" id="x">✕</button>
-      <h1>Số liệu tháng<span class="sub">${esc(v.id)}</span></h1></header>
-    <div class="f">
-      <div class="fg"><label>Tháng</label>
-        <input type="month" id="mm" value="${m?m.id:thisMonth()}" ${m?"disabled":""}>
-        ${m?`<div class="hint">Không đổi được tháng khi sửa.</div>`:""}</div>
-      <div class="fg"><label>Doanh thu (VNĐ)</label>
-        <input type="number" inputmode="numeric" id="dt" value="${m?.doanhThu??""}"></div>
-      <div class="fg"><label>Chi phí vận hành (VNĐ)</label>
-        <input type="number" inputmode="numeric" id="cp" value="${m?.chiPhi??""}">
-        <div class="hint">Xăng, rửa xe, bảo dưỡng, phí định vị, vá lốp…</div></div>
-      <div class="fg"><label>Trả ngân hàng (VNĐ)</label>
-        <input type="number" inputmode="numeric" id="nh" value="${m ? (m.nganHang??"") : (+v.traGopThang||"")}">
-        ${!m && +v.traGopThang>0?`<div class="hint">Điền sẵn theo mức trả góp cố định. Sửa lại nếu tháng này đóng khác.</div>`:""}</div>
-      <div class="fg"><label>Ghi chú</label><textarea id="gc">${esc(m?.ghiChu||"")}</textarea></div>
-      <div class="kv" style="margin-bottom:14px"><div class="r">
-        <span class="k">Lợi nhuận tháng</span><span class="v num" id="lp">—</span></div></div>
-      <button class="btn" id="save">Lưu tháng</button>
-    </div>`;
-  document.body.appendChild(el);
-
-  const calc = ()=>{
-    const p = (+el.querySelector("#dt").value||0) - (+el.querySelector("#cp").value||0) - (+el.querySelector("#nh").value||0);
-    const o = el.querySelector("#lp");
-    o.textContent = money(p); o.className = "v num " + (p>=0?"pos":"neg");
-  };
-  ["#dt","#cp","#nh"].forEach(s=>el.querySelector(s).oninput=calc); calc();
-  el.querySelector("#x").onclick = ()=>el.remove();
-  el.querySelector("#save").onclick = async()=>{
-    const id = el.querySelector("#mm").value;
-    if(!id) return alert("Chọn tháng đã.");
-    await saveMonth(v.id, {
-      id,
-      doanhThu:+el.querySelector("#dt").value||0,
-      chiPhi:+el.querySelector("#cp").value||0,
-      nganHang:+el.querySelector("#nh").value||0,
-      ghiChu:el.querySelector("#gc").value.trim()
-    });
-    el.remove(); VIEW.tab="mon"; renderDetail();
-  };
-}
 
 /* ---- Form xe ---- */
 function renderForm(v){
