@@ -1,7 +1,7 @@
 /* Đổi VERSION mỗi lần deploy bản mới -> máy người dùng tự nhận ra */
-const VERSION = "1.7.0";
+const VERSION = "2.0.1";
 const CACHE = `qlx-${VERSION}`;
-const SHELL = ["./", "./index.html", "./manifest.json"];
+const SHELL = ["./", "./index.html", "./manifest.json", "./logo-mark.png"];
 
 self.addEventListener("install", e => {
   // KHÔNG skipWaiting ở đây: chờ người dùng bấm "Cập nhật" mới đổi,
