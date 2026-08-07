@@ -135,6 +135,13 @@ a{color:inherit}
 .mtag b{display:block;font-size:15px;color:var(--ink)}
 
 /* ---------- Dashboard ---------- */
+.mpick{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:6px 8px}
+.mpick span{flex:1;text-align:center;font-size:13.5px;color:var(--ink-2)}
+.mpick span b{font-family:'Oswald',sans-serif;font-size:16px;color:var(--ink);font-weight:600}
+.mpick button{width:38px;height:38px;border-radius:9px;font-size:20px;color:var(--ink-2)}
+.mpick button:hover{background:var(--bg)}
+.mpick button[disabled]{opacity:.3;cursor:default}
 .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
 .stat .lb{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-family:'Oswald',sans-serif}
 .stat .vl{font-family:'Oswald',sans-serif;font-size:25px;font-weight:600;margin-top:5px}
@@ -256,6 +263,7 @@ a{color:inherit}
 <nav class="nav" id="nav">
   <div class="brand"><img class="mark" src="logo-mark.png" alt="Peaktime Supercar"></div>
   <button data-go="list" aria-current="page"><span class="ic">🚗</span>Tổng quan</button>
+  <button data-go="fin"><span class="ic">💰</span>Tài chính</button>
   <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
 </nav>
 
@@ -273,7 +281,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "1.9.1";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.0.1";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -359,6 +367,10 @@ async function loadMonthly(vid){
   const snap = await FS.getDocs(FS.collection(db,"vehicles",vid,"monthly"));
   MONTHLY[vid] = snap.docs.map(d=>({ id:d.id, ...d.data() })).sort((a,b)=>b.id.localeCompare(a.id));
   return MONTHLY[vid];
+}
+async function loadAllMonthly(){
+  if(!LIVE) return;
+  await Promise.all(VEHICLES.filter(v=>!MONTHLY[v.id]).map(v=>loadMonthly(v.id)));
 }
 async function saveVehicle(v){
   const { id, ...rest } = v;
@@ -520,7 +532,7 @@ async function fireNotify(force=false){
    ========================================================= */
 const app = document.getElementById("app");
 let VIEW = { name:"list", id:null, tab:"info" };
-let Q = "", FILTER = "all";
+let Q = "", FILTER = "all", FIN_M = null;
 
 function go(name, id=null, tab="info"){
   VIEW = { name, id, tab };
@@ -531,6 +543,7 @@ function go(name, id=null, tab="info"){
 }
 function render(){
   if(VIEW.name==="list") return renderList();
+  if(VIEW.name==="fin")  return renderFin();
   if(VIEW.name==="new")  return renderForm(null);
   if(VIEW.name==="edit") return renderForm(VEHICLES.find(v=>v.id===VIEW.id));
   if(VIEW.name==="detail") return renderDetail();
@@ -729,6 +742,102 @@ function paySheet(){
   el.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{ el.remove(); go("detail", b.dataset.v); });
 }
 
+
+/* ---- Tài chính toàn đội ---- */
+function shiftMonth(id, delta){
+  const [y,m] = id.split("-").map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+}
+
+async function renderFin(){
+  await loadAllMonthly();
+  const M = FIN_M || thisMonth();
+  const laMoiNhat = M >= thisMonth();
+
+  const rows = VEHICLES.map(v=>{
+    const m = (MONTHLY[v.id]||[]).find(x=>x.id===M);
+    return { v, m, p: m ? profit(m) : null };
+  });
+  const co = rows.filter(r=>r.m);
+  const thieu = rows.filter(r=>!r.m);
+
+  const thu  = co.reduce((s,r)=>s+(+r.m.doanhThu||0),0);
+  const chi  = co.reduce((s,r)=>s+(+r.m.chiPhi||0),0);
+  const nh   = co.reduce((s,r)=>s+(+r.m.nganHang||0),0);
+  const loi  = thu - chi - nh;
+
+  const tongGiaMua = VEHICLES.reduce((s,v)=>s+(+v.giaMua||0),0);
+  const tongDuNo   = VEHICLES.reduce((s,v)=>s+(+v.duNoConLai||0),0);
+  const tongGop    = tongPhaiDong();
+  const xep = co.slice().sort((a,b)=>b.p-a.p);
+
+  const nam = M.slice(0,4), thang = +M.slice(5);
+
+  app.innerHTML = `
+    <header class="bar">
+      ${LOGO}
+      <h1>Tài chính<span class="sub">Toàn đội · ${VEHICLES.length} xe</span></h1>
+      ${bellBtn()}
+    </header>
+
+    <div class="sec inner">
+      <div class="mpick">
+        <button id="mPrev" aria-label="Tháng trước">‹</button>
+        <span><b>Tháng ${thang}</b> / ${nam}</span>
+        <button id="mNext" aria-label="Tháng sau" ${laMoiNhat?'disabled':''}>›</button>
+      </div>
+
+      <div class="stat" style="margin:11px 0">
+        <div class="lb">Lợi nhuận tháng ${thang}</div>
+        <div class="vl ${loi>=0?"v pos":"v neg"}">${money(loi)} đ</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">
+          ${co.length}/${VEHICLES.length} xe đã nhập số liệu</div>
+      </div>
+
+      <div class="grid2">
+        <div class="stat"><div class="lb">Doanh thu</div><div class="vl">${money(thu)}</div></div>
+        <div class="stat"><div class="lb">Chi vận hành</div><div class="vl">${money(chi)}</div></div>
+        <div class="stat"><div class="lb">Đã trả ngân hàng</div><div class="vl">${money(nh)}</div></div>
+        <div class="stat"><div class="lb">Phải đóng/tháng</div><div class="vl">${money(tongGop)}</div></div>
+      </div>
+    </div>
+
+    <div class="secs">
+      <div class="sec"><h3>Vốn &amp; nợ</h3><div class="kv">
+        <div class="r"><span class="k">Tổng giá mua đội xe</span><span class="v num">${money(tongGiaMua)}</span></div>
+        <div class="r"><span class="k">Tổng dư nợ còn lại</span><span class="v num ${tongDuNo>0?"neg":"pos"}">${money(tongDuNo)}</span></div>
+        <div class="r"><span class="k">Phải đóng mỗi tháng</span><span class="v num">${money(tongGop)}</span></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-top:7px">
+        Dư nợ lấy theo số ông tự nhập ở từng xe, không phải số app tính.</div></div>
+
+      ${xep.length?`<div class="sec"><h3>Lãi lỗ từng xe — tháng ${thang}</h3><div class="kv">${xep.map(r=>
+        `<button class="mrow" data-v="${esc(r.v.id)}">
+          <span style="flex:1;min-width:0">
+            <span class="plate sm"><span>${esc(r.v.id)}</span></span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
+              Thu ${money(r.m.doanhThu)} · Chi ${money(r.m.chiPhi)} · NH ${money(r.m.nganHang)}</span>
+          </span>
+          <span class="v num ${r.p>=0?"pos":"neg"}">${money(r.p)}</span>
+        </button>`).join("")}</div></div>`:""}
+
+      ${thieu.length?`<div class="sec"><h3>Chưa nhập tháng ${thang} (${thieu.length} xe)</h3><div class="kv">${thieu.map(r=>
+        `<button class="mrow" data-v="${esc(r.v.id)}">
+          <span style="flex:1"><span class="plate sm"><span>${esc(r.v.id)}</span></span></span>
+          <span style="color:var(--ink-3);font-size:12.5px">Nhập ›</span></button>`).join("")}</div></div>`:""}
+    </div>
+
+    ${!VEHICLES.length?`<div class="empty"><div class="ic">💰</div><p>Thêm xe rồi số liệu sẽ hiện ở đây.</p></div>`:""}
+    <div style="height:24px"></div>`;
+
+  document.getElementById("mPrev").onclick = ()=>{ FIN_M = shiftMonth(M,-1); renderFin(); };
+  const nx = document.getElementById("mNext");
+  if(nx && !nx.disabled) nx.onclick = ()=>{ FIN_M = shiftMonth(M, 1); renderFin(); };
+  app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
+  wireBell();
+}
+
 /* ---- Chi tiết ---- */
 async function renderDetail(){
   const v = VEHICLES.find(x=>x.id===VIEW.id);
@@ -763,8 +872,15 @@ async function renderDetail(){
   document.getElementById("edit").onclick = ()=>go("edit", v.id);
   wireBell();
   app.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ VIEW.tab=b.dataset.t; renderDetail(); });
-  document.getElementById("tabbody").innerHTML =
-    VIEW.tab==="info" ? tabInfo(v) : VIEW.tab==="fin" ? tabFin(v) : tabMonthly(v);
+  try{
+    document.getElementById("tabbody").innerHTML =
+      VIEW.tab==="info" ? tabInfo(v) : VIEW.tab==="fin" ? tabFin(v) : tabMonthly(v);
+  }catch(err){
+    console.error("Lỗi hiển thị tab:", err);
+    document.getElementById("tabbody").innerHTML =
+      `<div class="sec"><div class="kv"><div class="r"><span class="k">
+        Không hiển thị được phần này. Lỗi: ${esc(err.message)}</span></div></div></div>`;
+  }
   wireTab(v);
 }
 
@@ -844,14 +960,13 @@ function tabFin(v){
     <div class="r"><span class="k">Trả trước</span><span class="v num">${money(tt)}</span></div>
     <div class="r"><span class="k">Số tiền vay</span><span class="v num">${money(vay)}</span></div>
   </div></div>
-  ${(vay>0 || +v.traGopThang>0)?`<div class="sec"><h3>Trả góp</h3><div class="kv">
+  ${(vay>0 || +v.traGopThang>0 || v.daTraNganHang || v.duNoConLai)?`<div class="sec"><h3>Trả góp</h3><div class="kv">
     ${+v.traGopThang>0?`<div class="r"><span class="k">Phải đóng mỗi tháng</span><span class="v num">${money(v.traGopThang)}</span></div>`:""}
     ${v.ngayDong?`<div class="r"><span class="k">Ngày đóng</span><span class="v">Ngày ${v.ngayDong} hàng tháng</span></div>`:""}
-    <div class="r"><span class="k">Đã trả ngân hàng</span><span class="v num">${money(tra)}</span></div>
-    <div class="r"><span class="k">Còn lại (ước tính)</span><span class="v num ${conLai>0?"neg":"pos"}">${money(conLai)}</span></div>
-    ${(+v.traGopThang>0 && conLai>0)?`<div class="r"><span class="k">Còn khoảng</span><span class="v num">${Math.ceil(conLai/(+v.traGopThang))} kỳ</span></div>`:""}
-  </div><div class="hint" style="font-size:11.5px;color:var(--ink-3);margin-top:6px">
-    Tính từ tổng cột “Ngân hàng” các tháng đã nhập — chưa tính lãi.</div></div>`:""}
+    ${(v.daTraNganHang||v.daTraNganHang===0)?`<div class="r"><span class="k">Đã trả ngân hàng</span><span class="v num">${money(v.daTraNganHang)}</span></div>`:""}
+    ${(v.duNoConLai||v.duNoConLai===0)?`<div class="r"><span class="k">Dư nợ còn lại</span><span class="v num ${+v.duNoConLai>0?"neg":"pos"}">${money(v.duNoConLai)}</span></div>`:""}
+    ${v.ngayCapNhatNo?`<div class="r"><span class="k">Cập nhật ngày</span><span class="v">${dmy(v.ngayCapNhatNo)}</span></div>`:""}
+  </div></div>`:""}
   <div class="sec full"><h3>Luỹ kế toàn thời gian</h3><div class="kv">
     <div class="r"><span class="k">Tổng doanh thu</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.doanhThu||0),0))}</span></div>
     <div class="r"><span class="k">Tổng chi vận hành</span><span class="v num">${money(all.reduce((s,m)=>s+(+m.chiPhi||0),0))}</span></div>
