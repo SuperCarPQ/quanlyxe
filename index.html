@@ -166,8 +166,8 @@ a{color:inherit}
 /* ---------- Nav ---------- */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:var(--safe-b)}
 .nav .brand{display:none}
-.mark{height:19px;width:auto;flex:0 0 auto;display:block}
-.bar .mark{height:22px;margin-right:2px}
+.mark{height:30px;width:auto;flex:0 0 auto;display:block}
+.bar .mark{height:34px;margin-right:6px}
 .nav button{flex:1;padding:9px 0 8px;color:var(--ink-3);font-size:10.5px;letter-spacing:.03em;position:relative}
 .nav button .ic{display:block;font-size:19px;margin-bottom:1px}
 .nav button[aria-current="page"]{color:var(--ink);font-weight:600}
@@ -218,12 +218,8 @@ a{color:inherit}
     border-top:none;border-right:1px solid var(--line);
     padding:20px 12px;gap:4px;
   }
-  .nav .brand{
-    display:flex;align-items:center;gap:9px;
-    font-family:'Oswald',sans-serif;font-weight:600;
-    font-size:14px;letter-spacing:.1em;text-transform:uppercase;
-    padding:6px 12px 20px;color:var(--ink);
-  }
+  .nav .brand{display:block;padding:4px 10px 22px}
+  .nav .brand .mark{height:38px}
   .nav button{
     flex:0 0 auto;display:flex;align-items:center;gap:11px;
     padding:11px 12px;border-radius:10px;font-size:14px;text-align:left;
@@ -258,7 +254,7 @@ a{color:inherit}
 <div id="app"></div>
 
 <nav class="nav" id="nav">
-  <div class="brand"><svg class="mark" viewBox="0 0 34 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="1" width="32" height="14" rx="2.8" fill="#F7C948" stroke="#12141A" stroke-width="1.7"/><text x="17" y="11.9" text-anchor="middle" font-family="Oswald,Arial Narrow,sans-serif" font-weight="700" font-size="9.4" letter-spacing=".6" fill="#12141A">QLX</text></svg>Quản lý xe</div>
+  <div class="brand"><img class="mark" src="logo-mark.png" alt="Peaktime Supercar"></div>
   <button data-go="list" aria-current="page"><span class="ic">🚗</span>Tổng quan</button>
   <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
 </nav>
@@ -277,11 +273,11 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "1.7.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "1.9.1";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
-const LOGO = `<svg class="mark" viewBox="0 0 34 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1" y="1" width="32" height="14" rx="2.8" fill="#F7C948" stroke="#12141A" stroke-width="1.7"/><text x="17" y="11.9" text-anchor="middle" font-family="Oswald,Arial Narrow,sans-serif" font-weight="700" font-size="9.4" letter-spacing=".6" fill="#12141A">QLX</text></svg>`;
+const LOGO = "<img class=\"mark\" src=\"logo-mark.png\" alt=\"Peaktime Supercar\">";
 
 const LIVE = !FIREBASE_CONFIG.apiKey.startsWith("DAN_");
 let db = null, FS = null;
