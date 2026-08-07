@@ -163,6 +163,7 @@ a{color:inherit}
 .fg{margin-bottom:13px}
 .fg label{display:block;font-size:12.5px;color:var(--ink-2);margin-bottom:5px;font-weight:500}
 .fg input,.fg select,.fg textarea{width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:15px}
+.dateinp.bad{border-color:var(--bad);background:#FDF2F1}
 .fg .hint{font-size:11.5px;color:var(--ink-3);margin-top:4px}
 .fg textarea{resize:vertical;min-height:66px;font-family:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:11px}
@@ -294,7 +295,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.4.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.5.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -430,9 +431,18 @@ async function removeExpense(M, id){
 const hangMucDaDung = () => [...new Set(
   Object.values(EXPENSES).flat().map(e=>e.hangMuc).filter(Boolean))].sort();
 
-async function loadAllMonthly(){
+/* Chỉ đọc đúng 1 tháng của mỗi xe -> mỗi lần mở màn Doanh thu tốn
+   đúng bằng số xe, thay vì số xe nhân số tháng đã có. */
+async function loadMonthOnly(M){
   if(!LIVE) return;
-  await Promise.all(VEHICLES.filter(v=>!MONTHLY[v.id]).map(v=>loadMonthly(v.id)));
+  await Promise.all(VEHICLES.map(async v=>{
+    const arr = MONTHLY[v.id] || (MONTHLY[v.id] = []);
+    if(arr.some(x=>x.id===M)) return;              // có rồi thì thôi
+    try{
+      const d = await FS.getDoc(FS.doc(db,"vehicles",v.id,"monthly",M));
+      if(d.exists()) arr.push({ id:M, ...d.data() });
+    }catch{}
+  }));
 }
 async function saveVehicle(v){
   const { id, ...rest } = v;
@@ -465,6 +475,50 @@ const daysLeft = s => s ? Math.ceil((new Date(s+"T00:00:00") - new Date().setHou
 const thisMonth = () => new Date().toISOString().slice(0,7);
 const monthLabel = id => { const [y,m]=id.split("-"); return { m:`T${+m}`, y }; };
 const profit = m => (+m.doanhThu||0) - (+m.chiPhi||0) - (+m.nganHang||0);
+/* Ô nhập ngày kiểu Việt Nam. Ô <input type="date"> của trình duyệt
+   hiện theo ngôn ngữ máy (máy tiếng Anh ra mm/dd), nên tự làm cho chắc. */
+function toISO(v){
+  const m = String(v||"").trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(!m) return "";
+  const d = +m[1], mo = +m[2], y = +m[3];
+  const dt = new Date(y, mo-1, d);
+  if(dt.getDate()!==d || dt.getMonth()!==mo-1 || dt.getFullYear()!==y) return "";
+  return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+const toVN = iso => {
+  const m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+};
+function dateField(id, val){
+  return `<input id="${id}" class="dateinp" type="text" inputmode="numeric" maxlength="10"
+    placeholder="dd/mm/yyyy" value="${esc(toVN(val))}">`;
+}
+function wireDates(root){
+  root.querySelectorAll(".dateinp").forEach(i=>{
+    i.addEventListener("input", ev=>{
+      const xoa = ev.inputType && ev.inputType.startsWith("delete");
+      const d = i.value.replace(/\D/g,"").slice(0,8);
+      let out = d.slice(0,2);
+      if(d.length > 2) out += "/" + d.slice(2,4);
+      if(d.length > 4) out += "/" + d.slice(4,8);
+      if(!xoa && (d.length === 2 || d.length === 4)) out += "/";
+      i.value = out;
+      i.classList.toggle("bad", i.value.length === 10 && !toISO(i.value));
+    });
+  });
+}
+
+function loiFirestore(err){
+  const m = String(err?.code || err?.message || err);
+  if(m.includes("permission-denied"))
+    return "Firestore từ chối ghi.\n\nVào Firebase Console → Firestore → Rules, thêm 2 dòng:\n" +
+           "match /expenses/{thang}/items/{id} { allow read, write: if true; }\n" +
+           "match /config/{doc} { allow read, write: if true; }\n\nRồi bấm Publish.";
+  if(m.includes("unavailable") || m.includes("offline"))
+    return "Không kết nối được Firestore. Kiểm tra mạng rồi thử lại.";
+  return "Không lưu được.\n\nChi tiết: " + m;
+}
+
 const store = {
   get(k){ try{ return localStorage.getItem(k); }catch{ return null; } },
   set(k,v){ try{ localStorage.setItem(k,v); }catch{} }
@@ -902,9 +956,9 @@ async function renderFin(){
 let REV_M = null;
 
 async function renderRev(){
-  await loadAllMonthly();
-  await loadSheets();
   const M = REV_M || thisMonth();
+  await loadMonthOnly(M);
+  await loadSheets();
   const laMoiNhat = M >= thisMonth();
   const nam = M.slice(0,4), thang = +M.slice(5);
 
@@ -1000,7 +1054,7 @@ async function renderRev(){
         capNhatTong();
       }catch(e){
         inp.classList.remove("saving");
-        alert("Không lưu được: " + e.message);
+        alert(loiFirestore(e));
       }
     };
   });
@@ -1047,8 +1101,10 @@ function sheetForm(){
     if(!ten || !url) return alert("Nhập đủ tên và đường dẫn.");
     if(!/^https?:\/\//i.test(url)) return alert("Đường dẫn phải bắt đầu bằng https://");
     SHEETS.push({ ten, url, khuVuc: el.querySelector("#stKv").value.trim() });
-    await saveSheets();
-    el.remove(); renderRev();
+    try{
+      await saveSheets();
+      el.remove(); renderRev();
+    }catch(err){ SHEETS.pop(); alert(loiFirestore(err)); }
   };
 }
 
@@ -1142,7 +1198,7 @@ function expForm(M, e){
         <input id="exTien" type="number" inputmode="numeric" value="${e?.soTien??""}"></div>
 
       <div class="fg"><label>Ngày chi</label>
-        <input id="exNgay" type="date" value="${esc(e?.ngay||M+"-01")}"></div>
+        ${dateField("exNgay", e?.ngay || M+"-01")}</div>
 
       <div class="fg"><label>Xe (nếu khoản này của riêng một xe)</label>
         <select id="exXe">
@@ -1158,28 +1214,46 @@ function expForm(M, e){
         <button class="btn danger" id="exDel">Xoá khoản này</button>`}
     </div>`;
   document.body.appendChild(el);
+  wireDates(el);
   el.querySelector("#x").onclick = ()=>el.remove();
 
-  el.querySelector("#exSave").onclick = async()=>{
+  const btn = el.querySelector("#exSave");
+  btn.onclick = async()=>{
     const hangMuc = el.querySelector("#exHm").value.trim();
     const soTien  = el.querySelector("#exTien").value;
     if(!hangMuc) return alert("Nhập hạng mục đã.");
     if(soTien === "") return alert("Nhập thành tiền đã.");
-    await saveExpense(M, {
-      id: e?.id || newId(),
-      hangMuc, soTien: +soTien,
-      ngay: el.querySelector("#exNgay").value,
-      xe: el.querySelector("#exXe").value,
-      ghiChu: el.querySelector("#exGc").value.trim()
-    });
-    el.remove(); renderExp();
+    const ngayRaw = el.querySelector("#exNgay").value.trim();
+    if(ngayRaw && !toISO(ngayRaw))
+      return alert("Ngày chi chưa đúng. Định dạng dd/mm/yyyy, ví dụ 05/08/2026.");
+    const nhan = btn.textContent;
+    btn.textContent = "Đang lưu…"; btn.disabled = true;
+    try{
+      await saveExpense(M, {
+        id: e?.id || newId(),
+        hangMuc, soTien: +soTien,
+        ngay: toISO(el.querySelector("#exNgay").value),
+        xe: el.querySelector("#exXe").value,
+        ghiChu: el.querySelector("#exGc").value.trim()
+      });
+      el.remove(); renderExp();
+    }catch(err){
+      btn.textContent = nhan; btn.disabled = false;
+      alert(loiFirestore(err));
+    }
   };
 
   const del = el.querySelector("#exDel");
   if(del) del.onclick = async()=>{
     if(!confirm(`Xoá khoản "${e.hangMuc}" ${money(e.soTien)} đ?`)) return;
-    await removeExpense(M, e.id);
-    el.remove(); renderExp();
+    try{
+      await removeExpense(M, e.id);
+      el.remove(); renderExp();
+    }catch(err){
+      alert(String(err.message||"").startsWith("NGAY_SAI")
+        ? "Ngày nhập chưa đúng. Định dạng phải là dd/mm/yyyy, ví dụ 05/08/2026."
+        : loiFirestore(err));
+    }
   };
 }
 
@@ -1391,20 +1465,20 @@ function renderForm(v){
       <div class="fhead">Đăng kiểm</div>
       <label class="cbx"><input type="checkbox" id="na_dk" ${(e.khongApDung||[]).includes("hetHanDangKiem")?"checked":""}>
         Xe này không cần đăng kiểm</label>
-      <div class="two">${F("dkm","Lần gần nhất","date",e.dangKiemMoi)}${F("dkh","Hết hạn","date",e.hetHanDangKiem)}</div>
+      <div class="two"><div class="fg"><label>Lần gần nhất</label>${dateField("dkm",e.dangKiemMoi)}</div><div class="fg"><label>Hết hạn</label>${dateField("dkh",e.hetHanDangKiem)}</div></div>
 
       <div class="fhead">Định vị (GPS)</div>
       ${F("dvn","Nhà cung cấp","text",e.nhaMangDinhVi,"Viettel, Bình Anh, Vinasun Tracking…")}
       ${F("dvl","Link trang định vị","text",e.linkDinhVi,"Dán link portal của hãng. App tạo nút mở thẳng ở tab Giấy tờ.")}
       <label class="cbx"><input type="checkbox" id="na_dv" ${(e.khongApDung||[]).includes("hetHanDinhVi")?"checked":""}>
         Xe này không gắn định vị</label>
-      <div class="two">${F("dvm","Gia hạn gần nhất","date",e.dinhViMoi)}${F("dvh","Hết hạn thuê bao","date",e.hetHanDinhVi)}</div>
+      <div class="two"><div class="fg"><label>Gia hạn gần nhất</label>${dateField("dvm",e.dinhViMoi)}</div><div class="fg"><label>Hết hạn thuê bao</label>${dateField("dvh",e.hetHanDinhVi)}</div></div>
 
       <div class="fhead">Phù hiệu</div>
       <label class="cbx"><input type="checkbox" id="na_ph" ${(e.khongApDung||[]).includes("hetHanPhuHieu")?"checked":""}>
         Xe này không cần phù hiệu</label>
       ${F("phs","Số phù hiệu","text",e.soPhuHieu)}
-      <div class="two">${F("phm","Cấp ngày","date",e.phuHieuMoi)}${F("phh","Hết hạn","date",e.hetHanPhuHieu)}</div>
+      <div class="two"><div class="fg"><label>Cấp ngày</label>${dateField("phm",e.phuHieuMoi)}</div><div class="fg"><label>Hết hạn</label>${dateField("phh",e.hetHanPhuHieu)}</div></div>
 
       <div class="fhead">Nhận dạng</div>
       ${F("vin","Số khung (VIN)","text",e.vin)}
@@ -1412,7 +1486,7 @@ function renderForm(v){
       ${F("cv","Cà vẹt đang ở đâu","text",e.caVet,"Ngân hàng giữ / bản gốc két công ty…")}
 
       <div class="fhead">Tài chính</div>
-      ${F("nm","Ngày mua","date",e.ngayMua)}
+      <div class="fg"><label>Ngày mua</label>${dateField("nm",e.ngayMua)}</div>
       ${F("gm","Giá mua (VNĐ)","number",e.giaMua)}
       <div class="fg"><label>Phương thức mua</label>
         <select id="pt">${["Trả thẳng","Trả góp","Thuê tài chính","Khác"].map(o=>
@@ -1427,7 +1501,7 @@ function renderForm(v){
         ${F("dtr","Đã trả ngân hàng (VNĐ)","number",e.daTraNganHang)}
         ${F("dno","Dư nợ còn lại (VNĐ)","number",e.duNoConLai)}
       </div>
-      ${F("ncn","Cập nhật số nợ ngày","date",e.ngayCapNhatNo,"Lấy theo sao kê ngân hàng. Tự gõ, app không tính.")}
+      <div class="fg"><label>Cập nhật số nợ ngày</label>${dateField("ncn",e.ngayCapNhatNo)}<div class="hint">Lấy theo sao kê ngân hàng. Tự gõ, app không tính.</div></div>
 
       <div class="fhead">Hồ sơ &amp; hình ảnh</div>
       <div class="fg"><label>Link thư mục Google Drive</label>
@@ -1443,11 +1517,19 @@ function renderForm(v){
       <button class="btn ghost" id="cancel">Huỷ</button>
     </div>`;
 
+  wireDates(app);
   const back = ()=> v ? go("detail", v.id) : go("list");
   document.getElementById("back").onclick = back;
   document.getElementById("cancel").onclick = back;
   document.getElementById("save").onclick = async()=>{
     const g = id => document.getElementById(id).value.trim();
+    const gd = id => {                       // ô ngày: đổi sang yyyy-mm-dd
+      const raw = document.getElementById(id).value.trim();
+      if(!raw) return "";
+      const iso = toISO(raw);
+      if(!iso) throw new Error("NGAY_SAI:" + id);
+      return iso;
+    };
     const n = id => document.getElementById(id).value===""?null:+document.getElementById(id).value;
     const ck = id => document.getElementById(id).checked;
     const khongApDung = [
@@ -1458,21 +1540,23 @@ function renderForm(v){
     const bs = v ? v.id : g("bs").toUpperCase();
     if(!bs) return alert("Nhập biển số xe đã.");
     if(!v && VEHICLES.some(x=>x.id===bs)) return alert("Biển số này đã có trong đội xe rồi.");
+    try{
     await saveVehicle({
       id:bs, hangXe:g("hx"), soCho:n("sc"), loaiXe:g("lx"),
       namSX:n("ns"), khuVuc:g("kv"), dungGiayTo:g("dgt"), hinhThuc:g("ht"), linkDrive:g("drv"),
-      khongApDung, dangKiemMoi:g("dkm"), hetHanDangKiem:g("dkh"),
-      nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:g("dvm"), hetHanDinhVi:g("dvh"),
-      soPhuHieu:g("phs"), phuHieuMoi:g("phm"), hetHanPhuHieu:g("phh"),
+      khongApDung, dangKiemMoi:gd("dkm"), hetHanDangKiem:gd("dkh"),
+      nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:gd("dvm"), hetHanDinhVi:gd("dvh"),
+      soPhuHieu:g("phs"), phuHieuMoi:gd("phm"), hetHanPhuHieu:gd("phh"),
       vin:g("vin"), soMay:g("sm"), caVet:g("cv"),
-      ngayMua:g("nm"), giaMua:n("gm"), phuongThucMua:document.getElementById("pt").value,
+      ngayMua:gd("nm"), giaMua:n("gm"), phuongThucMua:document.getElementById("pt").value,
       traTruoc:n("tt"), soTienVay:n("vay"),
       traGopThang:n("tg"), ngayDong:n("nd"),
-      soHoSo:g("hs"), daTraNganHang:n("dtr"), duNoConLai:n("dno"), ngayCapNhatNo:g("ncn"),
+      soHoSo:g("hs"), daTraNganHang:n("dtr"), duNoConLai:n("dno"), ngayCapNhatNo:gd("ncn"),
       ghiChuPhapLy:g("gc"),
       anh:g("anh").split("\n").map(s=>s.trim()).filter(Boolean)
     });
     go("detail", bs);
+    }catch(err){ alert(loiFirestore(err)); }
   };
 }
 
