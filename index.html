@@ -83,6 +83,8 @@ a{color:inherit}
 .plate span{font-family:'Oswald',sans-serif;font-weight:700;color:var(--plate-edge);letter-spacing:.05em;font-size:19px;line-height:1.1;white-space:nowrap}
 .plate.sm span{font-size:15px}
 .plate.lg span{font-size:26px}
+.plate.trang{background:#FFFFFF}
+.plate.trang span{color:#12141A}
 
 /* ---------- Tem ---------- */
 .tem{width:50px;height:50px;border-radius:50%;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center;line-height:1;box-shadow:inset 0 0 0 2px rgba(255,255,255,.45)}
@@ -167,6 +169,14 @@ a{color:inherit}
 .fg .hint{font-size:11.5px;color:var(--ink-3);margin-top:4px}
 .fg textarea{resize:vertical;min-height:66px;font-family:inherit}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.plchoose{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.plopt{display:block;text-align:center;background:var(--card);border:1.5px solid var(--line);
+  border-radius:12px;padding:12px 8px;cursor:pointer}
+.plopt input{position:absolute;opacity:0;pointer-events:none}
+.plopt .plate{margin-bottom:8px}
+.plopt b{display:block;font-size:13px;font-weight:600}
+.plopt i{display:block;font-style:normal;font-size:10.5px;color:var(--ink-3);margin-top:2px;line-height:1.3}
+.plopt:has(input:checked){border-color:var(--ink);background:#F4F5F6;box-shadow:0 0 0 1px var(--ink)}
 .cbx{display:flex;align-items:center;gap:9px;padding:9px 0 4px;font-size:13px;color:var(--ink-2);cursor:pointer}
 .cbx input{width:18px;height:18px;flex:0 0 auto;accent-color:var(--ink);margin:0}
 .fhead{font-family:'Oswald',sans-serif;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);margin:24px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
@@ -201,6 +211,14 @@ a{color:inherit}
 .paybar .vl{font-family:'Oswald',sans-serif;font-size:24px;font-weight:600;margin-top:2px;color:var(--plate)}
 .paybar .sb{font-size:11.5px;color:#9AA1AA;margin-top:2px}
 @media (min-width:900px){.paybar{max-width:1120px;margin:14px auto 0}}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.lgbox{background:var(--card);border:1px solid var(--line);border-radius:18px;
+  padding:32px 26px;max-width:380px;width:100%;text-align:center}
+.lgbox .mark{height:34px;margin:0 auto 20px}
+.lgbox h2{font-family:'Oswald',sans-serif;font-size:19px;letter-spacing:.08em;
+  text-transform:uppercase;margin:0 0 6px}
+.lgbox p{font-size:13.5px;color:var(--ink-3);margin:0 0 22px}
+.lgbox .btn{max-width:none}
 .empty{text-align:center;padding:56px 28px;color:var(--ink-3)}
 .empty .ic{font-size:40px;opacity:.35}
 .empty p{margin:10px 0 18px;font-size:14px}
@@ -295,25 +313,30 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.5.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.7.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
 const LOGO = "<img class=\"mark\" src=\"logo-mark.png\" alt=\"Peaktime Supercar\">";
 
 const LIVE = !FIREBASE_CONFIG.apiKey.startsWith("DAN_");
-let db = null, FS = null;
+let db = null, FS = null, FA = null, AUTH = null;
+let ME = null;   // { email, ten, anh }
 
 if (LIVE) {
-  const [{ initializeApp }, fs] = await Promise.all([
+  const [{ initializeApp }, fs, fa] = await Promise.all([
     import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js")
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"),
+    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js")
   ]);
   const app = initializeApp(FIREBASE_CONFIG);
   db = fs.initializeFirestore(app, {
     localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() })
   });
   FS = fs;
+  FA = fa;
+  AUTH = fa.getAuth(app);
+  await fa.setPersistence(AUTH, fa.browserLocalPersistence).catch(()=>{});
 }
 
 /* =========================================================
@@ -350,7 +373,7 @@ const DEMO = [
     soTienVay:0, traTruoc:390000000, traGopThang:0, ngayDong:null,
     khuVuc:"Phú Quốc", linkDrive:"",
     hinhThuc:"Cho thuê tự lái", dungGiayTo:"Cá nhân", caVet:"Bản gốc — két công ty", anh:[] },
-  { id:"68B-222.11", soCho:2, loaiXe:"Xe máy", hangXe:"Honda",
+  { id:"68B-222.11", soCho:2, loaiXe:"Xe máy", hangXe:"Honda", bienTrang:true,
     namSX:2024, ngayMua:"2024-05-19", giaMua:34000000, vin:"RLHJF6110RY000111", soMay:"JF61E-0009988",
     hetHanDangKiem:"", dangKiemMoi:"", hetHanDinhVi:"", dinhViMoi:"", nhaMangDinhVi:"", linkDinhVi:"",
     hetHanPhuHieu:"", phuHieuMoi:"", soPhuHieu:"",
@@ -592,6 +615,10 @@ function imgSrc(u, w=1000){
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${w}` : u;
 }
 const isFolder = u => /\/folders\//.test(String(u||""));
+/* Biển vàng = xe kinh doanh vận tải, biển trắng = xe cá nhân */
+const bienHTML = (v, co="") =>
+  `<span class="plate${co?" "+co:""}${v.bienTrang?" trang":""}"><span>${esc(v.id)}</span></span>`;
+
 function firstImg(v){
   const u = (v.anh||[]).find(x=>/^https?:\/\//i.test(x) && !isFolder(x));
   return u ? imgSrc(u, 300) : "";
@@ -668,11 +695,16 @@ function render(){
 }
 function bellBtn(){
   const n = allAlerts().length + allMissing().length;
-  return `<button class="iconbtn" id="bell" title="Cảnh báo giấy tờ" aria-label="Cảnh báo giấy tờ">🔔${n?`<span class="dot">${n}</span>`:""}</button>`;
+  const me = ME ? `<button class="iconbtn" id="acct" title="${esc(ME.email)}" aria-label="Tài khoản">${
+    ME.anh ? `<img src="${esc(ME.anh)}" alt="" style="width:24px;height:24px;border-radius:50%;display:block">` : "👤"
+  }</button>` : "";
+  return `<button class="iconbtn" id="bell" title="Cảnh báo giấy tờ" aria-label="Cảnh báo giấy tờ">🔔${n?`<span class="dot">${n}</span>`:""}</button>${me}`;
 }
 function wireBell(){
   const b = document.getElementById("bell");
   if(b) b.onclick = alertSheet;
+  const a = document.getElementById("acct");
+  if(a) a.onclick = taiKhoanSheet;
 }
 
 /* ---- Danh sách ---- */
@@ -763,7 +795,7 @@ function vCard(v){
   return `<div class="card"><button class="vcard" data-v="${esc(v.id)}">
     <div class="vthumb" ${img?`style="background-image:url('${esc(img)}')"`:""}>${img?"":"ẢNH"}</div>
     <div class="vmain">
-      <div class="plate sm"><span>${esc(v.id)}</span></div>
+      ${bienHTML(v,"sm")}
       <div class="vname">${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</div>
       <div class="vmeta">${v.khuVuc?`<b style="color:var(--ink-2)">${esc(v.khuVuc)}</b> · `:""}${esc(v.loaiXe||"—")} · ${v.namSX||"—"}</div>
       ${docPills(v)}
@@ -794,7 +826,7 @@ function alertSheet(){
         return `<button class="mrow" data-v="${esc(a.v.id)}">
           <span class="tem sm ${s.cls}"><b>${s.big}</b><i>${s.small}</i></span>
           <span style="flex:1;min-width:0">
-            <span class="plate sm"><span>${esc(a.v.id)}</span></span>
+            ${bienHTML(a.v,"sm")}
             <span style="display:block;font-size:12.5px;margin-top:5px;font-weight:600">${a.doc.label}</span>
             <span style="display:block;font-size:11.5px;color:var(--ink-3)">Hết hạn ${dmy(a.v[a.doc.key])}</span>
           </span>
@@ -805,7 +837,7 @@ function alertSheet(){
           `<button class="mrow" data-v="${esc(x.v.id)}">
             <span class="tem sm none"><b>${x.thieu.length}</b><i>mục</i></span>
             <span style="flex:1;min-width:0">
-              <span class="plate sm"><span>${esc(x.v.id)}</span></span>
+              ${bienHTML(x.v,"sm")}
               <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:5px">${x.thieu.map(esc).join(" · ")}</span>
             </span>
             <span style="color:var(--ink-3)">›</span></button>`).join("")}</div>
@@ -843,7 +875,7 @@ function paySheet(){
           <span class="mtag" style="${sapDen?"border-color:var(--warn);color:var(--warn)":""}">
             ${nd?`<b style="${sapDen?"color:var(--warn)":""}">${nd}</b>hàng<br>tháng`:`<b>—</b>chưa<br>rõ`}</span>
           <span style="flex:1;min-width:0">
-            <span class="plate sm"><span>${esc(v.id)}</span></span>
+            ${bienHTML(v,"sm")}
             <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:5px">
               ${esc(v.hangXe||"")}${v.khuVuc?` · ${esc(v.khuVuc)}`:""}${
                 nd ? (sapDen?" · sắp tới hạn":quaRoi?" · tháng này đã qua ngày đóng":"") : ""}</span>
@@ -928,7 +960,7 @@ async function renderFin(){
         <div class="kv" style="margin-top:8px">${k.xe.map(v=>
           `<button class="mrow" data-v="${esc(v.id)}">
             <span style="flex:1;min-width:0">
-              <span class="plate sm"><span>${esc(v.id)}</span></span>
+              ${bienHTML(v,"sm")}
               <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
                 ${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}${
                   +v.traGopThang>0?` · góp ${money(v.traGopThang)}/th`:" · không trả góp"}</span>
@@ -951,6 +983,89 @@ async function renderFin(){
   wireBell();
 }
 
+
+
+/* =========================================================
+   ĐĂNG NHẬP GOOGLE
+   Chỉ email có sẵn trong collection nhanVien mới vào được.
+   ========================================================= */
+async function dangNhap(){
+  const prov = new FA.GoogleAuthProvider();
+  prov.setCustomParameters({ prompt: "select_account" });
+  try{
+    await FA.signInWithPopup(AUTH, prov);
+  }catch(err){
+    const c = String(err?.code||"");
+    if(c.includes("popup-blocked") || c.includes("popup-closed") ||
+       c.includes("operation-not-supported") || c.includes("cancelled-popup")){
+      return FA.signInWithRedirect(AUTH, prov);   // PWA trên iOS hay chặn popup
+    }
+    if(c.includes("unauthorized-domain"))
+      return alert("Tên miền này chưa được cho phép.\n\nFirebase Console → Authentication → " +
+                   "Settings → Authorized domains → thêm " + location.hostname);
+    alert("Không đăng nhập được.\n\n" + (err?.message || c));
+  }
+}
+async function dangXuat(){
+  try{ await FA.signOut(AUTH); }catch{}
+  ME = null; VEHICLES = []; MONTHLY = {}; EXPENSES = {}; SHEETS = [];
+  manDangNhap();
+}
+
+/* Kiểm tra email có trong danh sách được phép không */
+async function layQuyen(user){
+  const email = (user.email||"").toLowerCase();
+  try{
+    const d = await FS.getDoc(FS.doc(db, "nhanVien", email));
+    if(!d.exists()) return null;
+    return { email, ten: d.data().ten || user.displayName || email, anh: user.photoURL || "" };
+  }catch{ return null; }
+}
+
+function manDangNhap(msg){
+  app.innerHTML = `
+    <div class="login">
+      <div class="lgbox">
+        ${LOGO}
+        <h2>Quản lý xe</h2>
+        <p>Đăng nhập bằng tài khoản Google đã được cấp quyền.</p>
+        ${msg ? `<div class="banner red" style="margin:0 0 14px">${esc(msg)}</div>` : ""}
+        <button class="btn" id="btnGG">
+          <span style="display:inline-flex;align-items:center;gap:9px;justify-content:center">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.0 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
+              <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.0 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+              <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.1 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.6 39.6 16.2 44 24 44z"/>
+              <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C36.9 40.2 44 35 44 24c0-1.3-.1-2.6-.4-3.9z"/>
+            </svg>
+            Đăng nhập với Google
+          </span>
+        </button>
+      </div>
+    </div>`;
+  document.getElementById("nav").classList.add("hide");
+  document.getElementById("btnGG").onclick = dangNhap;
+}
+
+function taiKhoanSheet(){
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button><h1>Tài khoản</h1></header>
+    <div class="f">
+      <div class="kv" style="margin-bottom:14px">
+        <div class="r"><span class="k">Tên</span><span class="v">${esc(ME.ten)}</span></div>
+        <div class="r"><span class="k">Email</span><span class="v mono">${esc(ME.email)}</span></div>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:14px">
+        Muốn cấp quyền cho người khác: Firebase Console → Firestore → collection
+        <b>nhanVien</b> → thêm document, ID là email của họ, thêm trường <b>ten</b>.</div>
+      <button class="btn danger" id="out">Đăng xuất</button>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+  el.querySelector("#out").onclick = ()=>{ el.remove(); dangXuat(); };
+}
 
 /* ---- Doanh thu xe hàng tháng ---- */
 let REV_M = null;
@@ -1009,7 +1124,7 @@ async function renderRev(){
           const r = getRev(v);
           return `<div class="revrow">
             <span class="rvname">
-              <span class="plate sm"><span>${esc(v.id)}</span></span>
+              ${bienHTML(v,"sm")}
               <span>${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</span>
             </span>
             <input class="revin" type="number" inputmode="numeric" data-v="${esc(v.id)}"
@@ -1275,7 +1390,7 @@ function noSheet(field, title, sub){
       ${list.length ? `<div class="kv">${list.map(v=>
         `<button class="mrow" data-v="${esc(v.id)}">
           <span style="flex:1;min-width:0">
-            <span class="plate sm"><span>${esc(v.id)}</span></span>
+            ${bienHTML(v,"sm")}
             <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
               ${esc(v.hangXe||"")}${v.khuVuc?` · ${esc(v.khuVuc)}`:""}</span>
           </span>
@@ -1306,7 +1421,7 @@ async function renderDetail(){
     </header>
     <div class="hero"><div class="inner">
       <div class="row">
-        <div class="plate lg"><span>${esc(v.id)}</span></div>
+        ${bienHTML(v,"lg")}
         <div style="flex:1"></div>
         <div class="tem ${t.cls}"><b>${t.big}</b><i>${t.small}</i></div>
       </div>
@@ -1444,6 +1559,15 @@ function renderForm(v){
         <input id="bs" value="${esc(e.id||"")}" ${v?"disabled":""} placeholder="68A-123.45">
         ${v?`<div class="hint">Biển số là khoá chính, không sửa được. Đổi biển thì tạo xe mới rồi xoá xe cũ.</div>`
            :`<div class="hint">Đây là mã định danh của xe trong app.</div>`}</div>
+      <div class="fg"><label>Màu biển số</label>
+        <div class="plchoose">
+          <label class="plopt"><input type="radio" name="mb" value="vang" ${e.bienTrang?"":"checked"}>
+            <span class="plate sm"><span>${esc(e.id||"68A-123.45")}</span></span>
+            <b>Biển vàng</b><i>Xe kinh doanh vận tải</i></label>
+          <label class="plopt"><input type="radio" name="mb" value="trang" ${e.bienTrang?"checked":""}>
+            <span class="plate sm trang"><span>${esc(e.id||"68A-123.45")}</span></span>
+            <b>Biển trắng</b><i>Xe cá nhân, không kinh doanh</i></label>
+        </div></div>
       <div class="two">${F("hx","Hãng xe","text",e.hangXe)}${F("sc","Số chỗ","number",e.soCho)}</div>
       <div class="two">${F("lx","Loại xe","text",e.loaiXe,"Ô tô 4 chỗ, 7 chỗ, xe máy…")}${F("ns","Năm sản xuất","number",e.namSX)}</div>
       <div class="fg"><label>Khu vực</label>
@@ -1542,7 +1666,8 @@ function renderForm(v){
     if(!v && VEHICLES.some(x=>x.id===bs)) return alert("Biển số này đã có trong đội xe rồi.");
     try{
     await saveVehicle({
-      id:bs, hangXe:g("hx"), soCho:n("sc"), loaiXe:g("lx"),
+      id:bs, bienTrang: document.querySelector('input[name="mb"]:checked')?.value === "trang",
+      hangXe:g("hx"), soCho:n("sc"), loaiXe:g("lx"),
       namSX:n("ns"), khuVuc:g("kv"), dungGiayTo:g("dgt"), hinhThuc:g("ht"), linkDrive:g("drv"),
       khongApDung, dangKiemMoi:gd("dkm"), hetHanDangKiem:gd("dkh"),
       nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:gd("dvm"), hetHanDinhVi:gd("dvh"),
@@ -1564,9 +1689,33 @@ function renderForm(v){
    7. KHỞI ĐỘNG
    ========================================================= */
 document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>go(b.dataset.go));
-await loadVehicles();
-go("list");
-fireNotify();
+
+async function vaoApp(){
+  document.getElementById("nav").classList.remove("hide");
+  await loadVehicles();
+  go("list");
+  fireNotify();
+}
+
+if(LIVE){
+  app.innerHTML = `<div class="login"><div class="lgbox">${LOGO}
+    <p style="margin:16px 0 0">Đang kiểm tra đăng nhập…</p></div></div>`;
+  document.getElementById("nav").classList.add("hide");
+  try{ await FA.getRedirectResult(AUTH); }catch{}
+  FA.onAuthStateChanged(AUTH, async user=>{
+    if(!user) return manDangNhap();
+    const q = await layQuyen(user);
+    if(!q){
+      manDangNhap(`Tài khoản ${user.email} chưa được cấp quyền. Báo quản trị thêm email này vào danh sách nhân viên.`);
+      try{ await FA.signOut(AUTH); }catch{}
+      return;
+    }
+    ME = q;
+    vaoApp();
+  });
+}else{
+  await vaoApp();          // chế độ dữ liệu mẫu, khỏi đăng nhập
+}
 
 checkUpdate();                                        // ghi nhận vân tay lúc mở app
 setInterval(checkUpdate, 5*60*1000);                  // 5 phút dò 1 lần
