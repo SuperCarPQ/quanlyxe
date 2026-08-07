@@ -281,7 +281,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.1.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.2.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -1225,9 +1225,60 @@ document.querySelectorAll("#nav button").forEach(b=>b.onclick=()=>go(b.dataset.g
 await loadVehicles();
 go("list");
 fireNotify();
+
+checkUpdate();                                        // ghi nhận vân tay lúc mở app
+setInterval(checkUpdate, 5*60*1000);                  // 5 phút dò 1 lần
+document.addEventListener("visibilitychange", ()=>{   // và mỗi lần quay lại app
+  if(!document.hidden) checkUpdate();
+});
+window.addEventListener("online", checkUpdate);
 setInterval(fireNotify, 6*60*60*1000);   // mở app lâu thì 6 tiếng kiểm lại
 
-/* ---------- Tự cập nhật khi có bản mới ---------- */
+/* ---------- Tự cập nhật khi có bản mới ----------
+   Không dựa vào số version nữa. App tự so dấu vân tay của index.html
+   trên máy chủ (ETag / Last-Modified) với lúc mở app. Khác nhau = có bản mới. */
+let BASE_SIG = null;
+let updating = false;
+
+async function fileSig(){
+  const url = "index.html?_=" + Date.now();
+  try{
+    const r = await fetch(url, { method:"HEAD", cache:"no-store" });
+    const sig = r.headers.get("etag") || r.headers.get("last-modified");
+    if(sig) return sig;
+  }catch{}
+  try{                                   // máy chủ không trả header -> băm nội dung
+    const r = await fetch(url, { cache:"no-store" });
+    const t = await r.text();
+    let h = 0;
+    for(let i=0;i<t.length;i++) h = (Math.imul(h,31) + t.charCodeAt(i))|0;
+    return "h" + h;
+  }catch{}
+  return null;
+}
+
+async function checkUpdate(){
+  if(updating) return;
+  const sig = await fileSig();
+  if(!sig) return;
+  if(BASE_SIG === null){ BASE_SIG = sig; return; }   // lần đầu chỉ ghi nhận
+  if(sig !== BASE_SIG) showUpdateBar(null);
+}
+
+async function applyUpdate(worker){
+  updating = true;
+  if(worker){ worker.postMessage({ type:"SKIP_WAITING" }); return; }
+  try{
+    if("caches" in window){
+      const ks = await caches.keys();
+      await Promise.all(ks.map(k=>caches.delete(k)));
+    }
+    const reg = await navigator.serviceWorker?.getRegistration();
+    if(reg) await reg.update();
+  }catch{}
+  location.reload();
+}
+
 function showUpdateBar(worker){
   if(document.getElementById("upbar")) return;
   const bar = document.createElement("div");
@@ -1239,7 +1290,7 @@ function showUpdateBar(worker){
   bar.querySelector("#upLater").onclick = ()=>bar.remove();
   bar.querySelector("#upNow").onclick = ()=>{
     bar.querySelector("#upNow").textContent = "Đang tải…";
-    worker.postMessage({ type:"SKIP_WAITING" });
+    applyUpdate(worker);
   };
 }
 
@@ -1257,11 +1308,7 @@ if("serviceWorker" in navigator){
       });
     });
 
-    const check = ()=>reg.update().catch(()=>{});
-    setInterval(check, 30*60*1000);                       // 30 phút kiểm 1 lần
-    document.addEventListener("visibilitychange", ()=>{   // mỗi lần quay lại app
-      if(!document.hidden) check();
-    });
+    setInterval(()=>reg.update().catch(()=>{}), 30*60*1000);
   }).catch(()=>{});
 
   // service worker mới nắm quyền -> nạp lại trang 1 lần
