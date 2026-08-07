@@ -281,7 +281,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.0.1";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.1.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -805,12 +805,18 @@ async function renderFin(){
 
     <div class="secs">
       <div class="sec"><h3>Vốn &amp; nợ</h3><div class="kv">
-        <div class="r"><span class="k">Tổng giá mua đội xe</span><span class="v num">${money(tongGiaMua)}</span></div>
-        <div class="r"><span class="k">Tổng dư nợ còn lại</span><span class="v num ${tongDuNo>0?"neg":"pos"}">${money(tongDuNo)}</span></div>
-        <div class="r"><span class="k">Phải đóng mỗi tháng</span><span class="v num">${money(tongGop)}</span></div>
+        <button class="mrow" data-no="giaMua">
+          <span class="k" style="flex:1">Tổng giá mua đội xe</span>
+          <span class="v num">${money(tongGiaMua)}</span><span style="color:var(--ink-3)">›</span></button>
+        <button class="mrow" data-no="duNoConLai">
+          <span class="k" style="flex:1">Tổng dư nợ còn lại</span>
+          <span class="v num ${tongDuNo>0?"neg":"pos"}">${money(tongDuNo)}</span><span style="color:var(--ink-3)">›</span></button>
+        <button class="mrow" data-no="traGopThang">
+          <span class="k" style="flex:1">Phải đóng mỗi tháng</span>
+          <span class="v num">${money(tongGop)}</span><span style="color:var(--ink-3)">›</span></button>
       </div>
       <div style="font-size:11.5px;color:var(--ink-3);margin-top:7px">
-        Dư nợ lấy theo số ông tự nhập ở từng xe, không phải số app tính.</div></div>
+        Bấm vào từng dòng để xem xe nào đang góp bao nhiêu.</div></div>
 
       ${xep.length?`<div class="sec"><h3>Lãi lỗ từng xe — tháng ${thang}</h3><div class="kv">${xep.map(r=>
         `<button class="mrow" data-v="${esc(r.v.id)}">
@@ -835,7 +841,46 @@ async function renderFin(){
   const nx = document.getElementById("mNext");
   if(nx && !nx.disabled) nx.onclick = ()=>{ FIN_M = shiftMonth(M, 1); renderFin(); };
   app.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>go("detail", b.dataset.v));
+  const NO = { giaMua:["Giá mua đội xe","Từng xe mua bao nhiêu"],
+               duNoConLai:["Dư nợ còn lại","Số nợ ngân hàng đang còn"],
+               traGopThang:["Phải đóng hàng tháng","Trả góp cố định mỗi tháng"] };
+  app.querySelectorAll("[data-no]").forEach(b=>b.onclick=()=>{
+    const f = b.dataset.no; noSheet(f, NO[f][0], NO[f][1]);
+  });
   wireBell();
+}
+
+/* ---- Bóc tách vốn & nợ theo từng xe ---- */
+function noSheet(field, title, sub){
+  const list = VEHICLES.filter(v=>+v[field] > 0)
+                       .sort((a,b)=>(+b[field]||0)-(+a[field]||0));
+  const tong = list.reduce((s,v)=>s+(+v[field]||0), 0);
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>${esc(title)}<span class="sub">${esc(sub)}</span></h1></header>
+    <div class="f">
+      <div class="stat" style="margin-bottom:14px">
+        <div class="lb">Tổng ${list.length} xe</div>
+        <div class="vl">${money(tong)} đ</div>
+      </div>
+      ${list.length ? `<div class="kv">${list.map(v=>
+        `<button class="mrow" data-v="${esc(v.id)}">
+          <span style="flex:1;min-width:0">
+            <span class="plate sm"><span>${esc(v.id)}</span></span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:4px">
+              ${esc(v.hangXe||"")}${v.khuVuc?` · ${esc(v.khuVuc)}`:""}</span>
+          </span>
+          <span class="v num">${money(v[field])}</span>
+        </button>`).join("")}</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px">
+          Số này do ông tự nhập ở form từng xe. Thấy sai thì bấm vào xe rồi sửa ở ✎.</div>`
+      : `<div class="empty"><div class="ic">—</div><p>Chưa xe nào có số liệu này.</p></div>`}
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+  el.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{ el.remove(); go("detail", b.dataset.v); });
 }
 
 /* ---- Chi tiết ---- */
