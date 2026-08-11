@@ -294,8 +294,7 @@ a{color:inherit}
   <div class="brand"><img class="mark" src="logo-mark.png" alt="Peaktime Supercar"></div>
   <button data-go="list" aria-current="page"><span class="ic">🚗</span>Tổng quan</button>
   <button data-go="fin"><span class="ic">💰</span>Tài chính</button>
-  <button data-go="rev"><span class="ic">💵</span>Doanh thu</button>
-  <button data-go="exp"><span class="ic">💸</span>Chi phí</button>
+  <button data-go="ct"><span class="ic">📋</span>Chi tiết</button>
   <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
 </nav>
 
@@ -751,8 +750,7 @@ function go(name, id=null, tab="info"){
 function render(){
   if(VIEW.name==="list") return renderList();
   if(VIEW.name==="fin")  return renderFin();
-  if(VIEW.name==="rev")  return renderRev();
-  if(VIEW.name==="exp")  return renderExp();
+  if(VIEW.name==="ct")   return renderChiTiet();
   if(VIEW.name==="new")  return renderForm(null);
   if(VIEW.name==="edit") return renderForm(VEHICLES.find(v=>v.id===VIEW.id));
   if(VIEW.name==="detail") return renderDetail();
@@ -1316,6 +1314,322 @@ function taiKhoanSheet(){
   el.querySelector("#out").onclick = ()=>{ el.remove(); dangXuat(); };
 }
 
+  /* ================= CHI TIẾT: 4 thẻ ================= */
+let CT_TAB = "rev";
+const CT_LIST = [["rev","Doanh thu"],["exp","Chi phí"],["luong","Lương"],["no","Công nợ"]];
+const ctTabs = () => `<div class="chips">${CT_LIST.map(([k,t])=>
+  `<button class="chip" data-ct="${k}" aria-pressed="${CT_TAB===k}">${t}</button>`).join("")}</div>`;
+function wireCtTabs(){
+  app.querySelectorAll("[data-ct]").forEach(b=>b.onclick=()=>{
+    CT_TAB = b.dataset.ct; renderChiTiet();
+  });
+}
+function renderChiTiet(){
+  if(CT_TAB==="rev")   return renderRev();
+  if(CT_TAB==="exp")   return renderExp();
+  if(CT_TAB==="luong") return renderLuong();
+  return renderCongNo();
+}
+
+/* ---- LƯƠNG ---- */
+let LUONG = LIVE ? {} : { "2026-08":[
+  { id:"l1", ten:"Nguyễn Văn A", viTri:"Tài xế", coBan:9000000, thuong:1500000, tru:0, daTra:true },
+  { id:"l2", ten:"Trần Thị B",   viTri:"Điều hành", coBan:11000000, thuong:0, tru:200000, daTra:false }
+]};
+let LUONG_M = null;
+const thucLinh = l => (+l.coBan||0) + (+l.thuong||0) - (+l.tru||0);
+
+async function loadLuong(M){
+  if(!LIVE) return LUONG[M] || (LUONG[M] = []);
+  if(LUONG[M]) return LUONG[M];
+  try{
+    const s = await FS.getDocs(FS.collection(db,"salaries",M,"items"));
+    LUONG[M] = s.docs.map(d=>({ id:d.id, ...d.data() }));
+  }catch{ LUONG[M] = []; }
+  return LUONG[M];
+}
+async function saveLuong(M, it){
+  const { id, ...rest } = it;
+  if(LIVE) await FS.setDoc(FS.doc(db,"salaries",M,"items",id), rest, { merge:true });
+  const a = LUONG[M] || (LUONG[M] = []);
+  const i = a.findIndex(x=>x.id===id);
+  if(i>=0) a[i]=it; else a.push(it);
+}
+async function xoaLuong(M, id){
+  if(LIVE) await FS.deleteDoc(FS.doc(db,"salaries",M,"items",id));
+  LUONG[M] = (LUONG[M]||[]).filter(x=>x.id!==id);
+}
+
+async function renderLuong(){
+  const M = LUONG_M || thisMonth();
+  const moi = M >= thisMonth();
+  const ds = (await loadLuong(M)).slice().sort((a,b)=>thucLinh(b)-thucLinh(a));
+  const tong = ds.reduce((s,l)=>s+thucLinh(l),0);
+  const daTra = ds.filter(l=>l.daTra).reduce((s,l)=>s+thucLinh(l),0);
+  const conLai = tong - daTra;
+
+  app.innerHTML = `
+    <header class="bar">${LOGO}
+      <h1>Chi tiết<span class="sub">Lương</span></h1>${bellBtn()}</header>
+    ${ctTabs()}
+    <div class="sec inner">
+      <div class="mpick">
+        <button id="lPrev">‹</button>
+        <span><b>Tháng ${+M.slice(5)}</b> / ${M.slice(0,4)}</span>
+        <button id="lNext" ${moi?'disabled':''}>›</button>
+      </div>
+      <div class="stat" style="margin-top:11px">
+        <div class="lb">Quỹ lương tháng ${+M.slice(5)}</div>
+        <div class="vl">${money(tong)} đ</div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:3px">${ds.length} người</div>
+      </div>
+      <div class="grid2" style="margin-top:11px">
+        <div class="stat"><div class="lb">Đã trả</div><div class="vl v pos">${money(daTra)}</div></div>
+        <div class="stat"><div class="lb">Chưa trả</div><div class="vl ${conLai>0?"v neg":"v pos"}">${money(conLai)}</div></div>
+      </div>
+      <div style="height:11px"></div>
+      <button class="btn" id="themL">＋ Thêm người</button>
+    </div>
+    <div class="secs"><div class="sec full">
+      <h3>Danh sách ${ds.length?`(${ds.length})`:""}</h3>
+      ${ds.length ? `<div class="kv">${ds.map(l=>`
+        <button class="mrow" data-l="${esc(l.id)}">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-weight:600;font-size:14px">${esc(l.ten||"—")}</span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px">
+              ${esc(l.viTri||"—")} · CB ${money(l.coBan)}${+l.thuong?` · thưởng ${money(l.thuong)}`:""}${+l.tru?` · trừ ${money(l.tru)}`:""}</span>
+          </span>
+          <span style="text-align:right">
+            <span class="v num" style="display:block">${money(thucLinh(l))}</span>
+            <span class="pill ${l.daTra?"ok":"warn"}" style="margin-top:4px">${l.daTra?"đã trả":"chưa trả"}</span>
+          </span>
+        </button>`).join("")}</div>`
+      : `<div class="kv"><div class="r"><span class="k">Chưa có ai. Bấm “Thêm người”.</span></div></div>`}
+    </div></div>
+    <div style="height:24px"></div>`;
+
+  document.getElementById("lPrev").onclick = ()=>{ LUONG_M = shiftMonth(M,-1); renderLuong(); };
+  const nx = document.getElementById("lNext");
+  if(nx && !nx.disabled) nx.onclick = ()=>{ LUONG_M = shiftMonth(M,1); renderLuong(); };
+  document.getElementById("themL").onclick = ()=>luongForm(M, null);
+  app.querySelectorAll("[data-l]").forEach(b=>b.onclick=()=>
+    luongForm(M, ds.find(x=>x.id===b.dataset.l)));
+  wireCtTabs(); wireBell();
+}
+
+function luongForm(M, l){
+  const moi = !l;
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>${moi?"Thêm người":"Sửa lương"}<span class="sub">Tháng ${+M.slice(5)}/${M.slice(0,4)}</span></h1></header>
+    <div class="f">
+      <div class="fg"><label>Họ tên *</label><input id="lTen" value="${esc(l?.ten||"")}"></div>
+      <div class="fg"><label>Vị trí</label>
+        <input id="lVt" value="${esc(l?.viTri||"")}" placeholder="Tài xế, điều hành, kế toán…"></div>
+      <div class="fg"><label>Lương cơ bản (VNĐ) *</label>${moneyField("lCb", l?.coBan)}</div>
+      <div class="two">
+        <div class="fg"><label>Thưởng (VNĐ)</label>${moneyField("lTh", l?.thuong)}</div>
+        <div class="fg"><label>Trừ (VNĐ)</label>${moneyField("lTr", l?.tru)}</div>
+      </div>
+      <div class="kv" style="margin-bottom:13px"><div class="r">
+        <span class="k">Thực lĩnh</span><span class="v num" id="lTl">—</span></div></div>
+      <label class="cbx"><input type="checkbox" id="lDt" ${l?.daTra?"checked":""}> Đã trả lương tháng này</label>
+      <div class="fg" style="margin-top:13px"><label>Ghi chú</label>
+        <textarea id="lGc">${esc(l?.ghiChu||"")}</textarea></div>
+      <button class="btn" id="lLuu">${moi?"Thêm":"Lưu thay đổi"}</button>
+      ${moi?"":`<div style="height:10px"></div><button class="btn danger" id="lXoa">Xoá người này</button>`}
+    </div>`;
+  document.body.appendChild(el);
+  wireMoney(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+
+  const tinh = ()=>{
+    const t = (soVe(el.querySelector("#lCb").value)||0)
+            + (soVe(el.querySelector("#lTh").value)||0)
+            - (soVe(el.querySelector("#lTr").value)||0);
+    const o = el.querySelector("#lTl");
+    o.textContent = money(t); o.className = "v num " + (t>=0?"pos":"neg");
+  };
+  ["#lCb","#lTh","#lTr"].forEach(s=>el.querySelector(s).addEventListener("input", tinh));
+  tinh();
+
+  const btn = el.querySelector("#lLuu");
+  btn.onclick = async()=>{
+    const ten = el.querySelector("#lTen").value.trim();
+    if(!ten) return alert("Nhập họ tên đã.");
+    const cb = soVe(el.querySelector("#lCb").value);
+    if(cb === null) return alert("Nhập lương cơ bản đã.");
+    const nhan = btn.textContent; btn.textContent = "Đang lưu…"; btn.disabled = true;
+    try{
+      await saveLuong(M, {
+        id: l?.id || newId(), ten,
+        viTri: el.querySelector("#lVt").value.trim(),
+        coBan: cb,
+        thuong: soVe(el.querySelector("#lTh").value) || 0,
+        tru:    soVe(el.querySelector("#lTr").value) || 0,
+        daTra:  el.querySelector("#lDt").checked,
+        ghiChu: el.querySelector("#lGc").value.trim()
+      });
+      el.remove(); renderLuong();
+    }catch(err){ btn.textContent = nhan; btn.disabled = false; alert(loiFirestore(err)); }
+  };
+  const xoa = el.querySelector("#lXoa");
+  if(xoa) xoa.onclick = async()=>{
+    if(!confirm(`Xoá ${l.ten} khỏi bảng lương tháng này?`)) return;
+    try{ await xoaLuong(M, l.id); el.remove(); renderLuong(); }
+    catch(err){ alert(loiFirestore(err)); }
+  };
+}
+
+/* ---- CÔNG NỢ ---- */
+let CONGNO = LIVE ? null : [
+  { id:"n1", ten:"Anh Tuấn thuê xe tháng 7", loai:"thu", soTien:12000000, ngay:"2026-07-20", hanTra:"2026-08-20", xong:false },
+  { id:"n2", ten:"Garage Minh Phát",          loai:"tra", soTien:4500000,  ngay:"2026-08-02", hanTra:"", xong:false }
+];
+let NO_LOC = "chua";
+
+async function loadNo(){
+  if(!LIVE) return CONGNO;
+  if(CONGNO) return CONGNO;
+  try{
+    const s = await FS.getDocs(FS.collection(db,"debts"));
+    CONGNO = s.docs.map(d=>({ id:d.id, ...d.data() }));
+  }catch{ CONGNO = []; }
+  return CONGNO;
+}
+async function saveNo(it){
+  const { id, ...rest } = it;
+  if(LIVE) await FS.setDoc(FS.doc(db,"debts",id), rest, { merge:true });
+  CONGNO = CONGNO || [];
+  const i = CONGNO.findIndex(x=>x.id===id);
+  if(i>=0) CONGNO[i]=it; else CONGNO.push(it);
+}
+async function xoaNo(id){
+  if(LIVE) await FS.deleteDoc(FS.doc(db,"debts",id));
+  CONGNO = (CONGNO||[]).filter(x=>x.id!==id);
+}
+
+async function renderCongNo(){
+  const all = await loadNo();
+  const chua = all.filter(n=>!n.xong);
+  const thu = chua.filter(n=>n.loai==="thu").reduce((s,n)=>s+(+n.soTien||0),0);
+  const tra = chua.filter(n=>n.loai==="tra").reduce((s,n)=>s+(+n.soTien||0),0);
+  const homNay = new Date().toISOString().slice(0,10);
+
+  let ds = NO_LOC==="all" ? all
+         : NO_LOC==="xong" ? all.filter(n=>n.xong)
+         : NO_LOC==="thu"  ? chua.filter(n=>n.loai==="thu")
+         : NO_LOC==="tra"  ? chua.filter(n=>n.loai==="tra")
+         : chua;
+  ds = ds.slice().sort((a,b)=>(a.hanTra||"9999").localeCompare(b.hanTra||"9999"));
+
+  const LOC = [["chua","Chưa xong"],["thu","Phải thu"],["tra","Phải trả"],["xong","Đã xong"],["all","Tất cả"]];
+
+  app.innerHTML = `
+    <header class="bar">${LOGO}
+      <h1>Chi tiết<span class="sub">Công nợ</span></h1>${bellBtn()}</header>
+    ${ctTabs()}
+    <div class="sec inner">
+      <div class="grid2">
+        <div class="stat"><div class="lb">Phải thu</div><div class="vl v pos">${money(thu)}</div></div>
+        <div class="stat"><div class="lb">Phải trả</div><div class="vl v neg">${money(tra)}</div></div>
+      </div>
+      <div class="stat" style="margin-top:11px">
+        <div class="lb">Chênh lệch</div>
+        <div class="vl ${thu-tra>=0?"v pos":"v neg"}">${money(thu-tra)} đ</div>
+      </div>
+      <div style="height:11px"></div>
+      <button class="btn" id="themN">＋ Thêm khoản nợ</button>
+    </div>
+    <div class="chips">${LOC.map(([k,t])=>
+      `<button class="chip" data-nl="${k}" aria-pressed="${NO_LOC===k}">${t}</button>`).join("")}</div>
+    <div class="secs"><div class="sec full">
+      ${ds.length ? `<div class="kv">${ds.map(n=>{
+        const tre = !n.xong && n.hanTra && n.hanTra < homNay;
+        return `<button class="mrow" data-n="${esc(n.id)}">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-weight:600;font-size:14px">${esc(n.ten||"—")}</span>
+            <span style="display:block;font-size:11.5px;color:var(--ink-3);margin-top:2px">
+              ${n.loai==="thu"?"Phải thu":"Phải trả"}${n.ngay?` · ${dmy(n.ngay)}`:""}${
+                n.hanTra?` · hạn ${dmy(n.hanTra)}`:""}${tre?" · QUÁ HẠN":""}${n.xong?" · đã xong":""}</span>
+          </span>
+          <span class="v num ${n.xong?"":(n.loai==="thu"?"pos":"neg")}" style="${n.xong?"opacity:.45":""}">${money(n.soTien)}</span>
+        </button>`; }).join("")}</div>`
+      : `<div class="kv"><div class="r"><span class="k">Không có khoản nào ở mục này.</span></div></div>`}
+    </div></div>
+    <div style="height:24px"></div>`;
+
+  document.getElementById("themN").onclick = ()=>noForm(null);
+  app.querySelectorAll("[data-nl]").forEach(b=>b.onclick=()=>{ NO_LOC=b.dataset.nl; renderCongNo(); });
+  app.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>
+    noForm(all.find(x=>x.id===b.dataset.n)));
+  wireCtTabs(); wireBell();
+}
+
+function noForm(n){
+  const moi = !n;
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `
+    <header class="bar"><button class="iconbtn" id="x">✕</button>
+      <h1>${moi?"Thêm khoản nợ":"Sửa khoản nợ"}</h1></header>
+    <div class="f">
+      <div class="fg"><label>Nội dung / tên người *</label>
+        <input id="nTen" value="${esc(n?.ten||"")}" placeholder="Anh Tuấn thuê xe tháng 7"></div>
+      <div class="fg"><label>Loại</label>
+        <select id="nLoai">
+          <option value="thu" ${n?.loai!=="tra"?"selected":""}>Phải thu — người ta nợ mình</option>
+          <option value="tra" ${n?.loai==="tra"?"selected":""}>Phải trả — mình nợ người ta</option>
+        </select></div>
+      <div class="fg"><label>Số tiền (VNĐ) *</label>${moneyField("nTien", n?.soTien)}</div>
+      <div class="two">
+        <div class="fg"><label>Ngày phát sinh</label>${dateField("nNgay", n?.ngay)}</div>
+        <div class="fg"><label>Hạn thanh toán</label>${dateField("nHan", n?.hanTra)}</div>
+      </div>
+      <label class="cbx"><input type="checkbox" id="nXong" ${n?.xong?"checked":""}> Đã tất toán xong</label>
+      <div class="fg" style="margin-top:13px"><label>Ghi chú</label>
+        <textarea id="nGc">${esc(n?.ghiChu||"")}</textarea></div>
+      <button class="btn" id="nLuu">${moi?"Thêm":"Lưu thay đổi"}</button>
+      ${moi?"":`<div style="height:10px"></div><button class="btn danger" id="nXoa">Xoá khoản này</button>`}
+    </div>`;
+  document.body.appendChild(el);
+  wireMoney(el); wireDates(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+
+  const btn = el.querySelector("#nLuu");
+  btn.onclick = async()=>{
+    const ten = el.querySelector("#nTen").value.trim();
+    if(!ten) return alert("Nhập nội dung đã.");
+    const t = soVe(el.querySelector("#nTien").value);
+    if(t === null) return alert("Nhập số tiền đã.");
+    const ng = el.querySelector("#nNgay").value.trim();
+    const hn = el.querySelector("#nHan").value.trim();
+    if(ng && !toISO(ng)) return alert("Ngày phát sinh chưa đúng (dd/mm/yyyy).");
+    if(hn && !toISO(hn)) return alert("Hạn thanh toán chưa đúng (dd/mm/yyyy).");
+    const nhan = btn.textContent; btn.textContent = "Đang lưu…"; btn.disabled = true;
+    try{
+      await saveNo({
+        id: n?.id || newId(), ten,
+        loai: el.querySelector("#nLoai").value,
+        soTien: t,
+        ngay: ng ? toISO(ng) : "",
+        hanTra: hn ? toISO(hn) : "",
+        xong: el.querySelector("#nXong").checked,
+        ghiChu: el.querySelector("#nGc").value.trim()
+      });
+      el.remove(); renderCongNo();
+    }catch(err){ btn.textContent = nhan; btn.disabled = false; alert(loiFirestore(err)); }
+  };
+  const xoa = el.querySelector("#nXoa");
+  if(xoa) xoa.onclick = async()=>{
+    if(!confirm(`Xoá khoản "${n.ten}"?`)) return;
+    try{ await xoaNo(n.id); el.remove(); renderCongNo(); }
+    catch(err){ alert(loiFirestore(err)); }
+  };
+}
+  
 /* ---- Doanh thu xe hàng tháng ---- */
 let REV_M = null;
 
@@ -1348,9 +1662,10 @@ async function renderRev(){
   app.innerHTML = `
     <header class="bar">
       ${LOGO}
-      <h1>Doanh thu<span class="sub">Theo tháng · ${VEHICLES.length} xe</span></h1>
+      <h1>Chi tiết<span class="sub">Doanh thu · ${VEHICLES.length} xe</span></h1>
       ${bellBtn()}
     </header>
+    ${ctTabs()}
 
     <div class="sec inner">
       <div class="mpick">
@@ -1437,7 +1752,7 @@ async function renderRev(){
   });
   const add = document.getElementById("addSheet");
   if(add) add.onclick = sheetForm;
-  wireBell();
+  wireCtTabs(); wireBell();
 }
 
 function sheetForm(){
@@ -1496,9 +1811,10 @@ async function renderExp(){
   app.innerHTML = `
     <header class="bar">
       ${LOGO}
-      <h1>Chi phí<span class="sub">Theo tháng</span></h1>
+      <h1>Chi tiết<span class="sub">Chi phí</span></h1>
       ${bellBtn()}
     </header>
+    ${ctTabs()}
 
     <div class="sec inner">
       <div class="mpick">
@@ -1542,7 +1858,7 @@ async function renderExp(){
   document.getElementById("addExp").onclick = ()=>expForm(M, null);
   app.querySelectorAll("[data-e]").forEach(b=>b.onclick=()=>
     expForm(M, items.find(x=>x.id===b.dataset.e)));
-  wireBell();
+  wireCtTabs(); wireBell();
 }
 
 function expForm(M, e){
