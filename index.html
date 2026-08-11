@@ -299,6 +299,24 @@ a{color:inherit}
   <button data-go="new"><span class="ic">＋</span>Thêm xe</button>
 </nav>
 
+<script>
+/* Bắt lỗi sớm: có sự cố thì hiện ra màn hình thay vì để trắng trơn */
+window.__loi = function(nguon, e){
+  const el = document.getElementById("app");
+  if(!el) return;
+  const msg = (e && (e.stack || e.message)) || String(e);
+  el.innerHTML =
+    '<div style="padding:24px;font-family:system-ui,sans-serif">' +
+    '<h2 style="font-size:17px;margin:0 0 10px">App gặp lỗi</h2>' +
+    '<p style="font-size:13px;color:#4A4F58;margin:0 0 12px">Chụp màn hình này gửi cho người làm app.</p>' +
+    '<pre style="white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid #D5D8DC;' +
+    'border-radius:10px;padding:12px;font-size:11.5px;line-height:1.5;margin:0">' +
+    '[' + nguon + ']\n' + String(msg).replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) +
+    '</pre></div>';
+};
+window.addEventListener("error", e => window.__loi("lỗi chạy", e.error || e.message));
+window.addEventListener("unhandledrejection", e => window.__loi("lỗi ngầm", e.reason));
+</script>
 <script type="module">
 /* =========================================================
    1. CẤU HÌNH FIREBASE
@@ -313,7 +331,8 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.8.0";   // phải khớp với VERSION trong sw.js
+const COL_TK = "QuanLyTK";   // collection chứa danh sách người được vào app
+const APP_VERSION = "2.8.2";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -324,6 +343,7 @@ let db = null, FS = null, FA = null, AUTH = null;
 let ME = null;   // { email, ten, anh }
 
 if (LIVE) {
+  try{
   const [{ initializeApp }, fs, fa] = await Promise.all([
     import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
     import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js"),
@@ -337,6 +357,10 @@ if (LIVE) {
   FA = fa;
   AUTH = fa.getAuth(app);
   await fa.setPersistence(AUTH, fa.browserLocalPersistence).catch(()=>{});
+  }catch(err){
+    window.__loi("nạp Firebase", err);
+    throw err;
+  }
 }
 
 /* =========================================================
@@ -1006,9 +1030,8 @@ async function renderFin(){
 
 /* =========================================================
    ĐĂNG NHẬP GOOGLE
-   Chỉ email có sẵn trong collection qlxTaiKhoan mới vào được.
-   Đặt tên riêng có tiền tố qlx để khỏi đụng collection của app khác
-   khi dùng chung một project Firebase.
+   Chỉ email có sẵn trong collection COL_TK mới vào được.
+   Đổi tên collection thì sửa hằng số COL_TK ở đầu file, không sửa rải rác.
    ========================================================= */
 async function dangNhap(){
   const prov = new FA.GoogleAuthProvider();
@@ -1038,22 +1061,24 @@ async function dangXuat(){
 async function layQuyen(user){
   const email = (user.email||"").toLowerCase();
   try{
-    const d = await FS.getDoc(FS.doc(db, "qlxTaiKhoan", email));
+    const d = await FS.getDoc(FS.doc(db, COL_TK, email));
     if(!d.exists())
       return { ok:false, ly_do:
         `Email ${email} chưa có trong danh sách được phép.\n\n` +
-        `Vào Firebase Console → Firestore → collection qlxTaiKhoan → tạo document có\n` +
+        `Vào Firebase Console → Firestore → collection ${COL_TK} → tạo document có\n` +
         `Document ID chính xác là:  ${email}\n` +
         `(viết thường hết, không thừa dấu cách), thêm trường ten kiểu string.` };
-    return { ok:true, me:{ email, ten: d.data().ten || user.displayName || email,
-                           anh: user.photoURL || "", chu: d.data().vaiTro === "chu" } };
+    const r = d.data() || {};
+    const vai = String(r.vaiTro ?? r.SPC ?? r.role ?? r.quyen ?? "").trim().toLowerCase();
+    return { ok:true, me:{ email, ten: r.ten || r.name || user.displayName || email,
+                           anh: user.photoURL || "", chu: ["chu","admin","owner"].includes(vai) } };
   }catch(err){
     const c = String(err?.code || err?.message || err);
     if(c.includes("permission-denied"))
       return { ok:false, ly_do:
         `Firestore chặn không cho đọc danh sách nhân viên.\n\n` +
-        `Thường là do publish rules mới TRƯỚC khi tạo document qlxTaiKhoan/${email}.\n\n` +
-        `Cách gỡ: Firestore → Rules → tạm đổi dòng qlxTaiKhoan thành\n` +
+        `Thường là do publish rules mới TRƯỚC khi tạo document ${COL_TK}/${email}.\n\n` +
+        `Cách gỡ: Firestore → Rules → tạm đổi dòng ${COL_TK} thành\n` +
         `  allow read: if request.auth != null;\n` +
         `rồi Publish, tạo document, xong trả rules về như cũ.` };
     if(c.includes("unavailable") || c.includes("offline"))
@@ -1092,9 +1117,12 @@ function manDangNhap(msg, email){
 let NHANSU = [];
 async function loadNhanSu(){
   if(!LIVE) return NHANSU;
-  const snap = await FS.getDocs(FS.collection(db, "qlxTaiKhoan"));
-  NHANSU = snap.docs.map(d=>({ email:d.id, ...d.data() }))
-                    .sort((a,b)=>(b.vaiTro==="chu")-(a.vaiTro==="chu") || a.email.localeCompare(b.email));
+  const snap = await FS.getDocs(FS.collection(db, COL_TK));
+  const laChu = r => ["chu","admin","owner"].includes(
+    String(r.vaiTro ?? r.SPC ?? r.role ?? r.quyen ?? "").trim().toLowerCase());
+  NHANSU = snap.docs.map(d=>{ const r = d.data()||{};
+      return { email:d.id, ...r, ten: r.ten || r.name || d.id, _chu: laChu(r) }; })
+    .sort((a,b)=>(b._chu-a._chu) || a.email.localeCompare(b.email));
   return NHANSU;
 }
 
@@ -1120,9 +1148,9 @@ async function nhanSuSheet(){
       <button class="btn" id="them" style="margin-bottom:14px">＋ Thêm nhân viên</button>
       <div class="kv">${ds.map(u=>`
         <div class="drive">
-          <span class="dic">${u.vaiTro==="chu"?"👑":"👤"}</span>
+          <span class="dic">${u._chu?"👑":"👤"}</span>
           <span class="dtx"><b>${esc(u.ten||u.email)}</b>
-            <span>${esc(u.email)}${u.vaiTro==="chu"?" · Chủ":""}</span></span>
+            <span>${esc(u.email)}${u._chu?" · Chủ":""}</span></span>
           ${u.email===ME.email
             ? `<span style="font-size:11px;color:var(--ink-3)">bạn</span>`
             : `<button class="iconbtn" data-xoa="${esc(u.email)}" style="color:var(--bad);font-size:15px">✕</button>`}
@@ -1136,7 +1164,7 @@ async function nhanSuSheet(){
       const em = b.dataset.xoa;
       if(!confirm(`Rút quyền của ${em}?`)) return;
       try{
-        await FS.deleteDoc(FS.doc(db, "qlxTaiKhoan", em));
+        await FS.deleteDoc(FS.doc(db, COL_TK, em));
         ds = ds.filter(u=>u.email!==em); ve();
       }catch(err){ alert(loiFirestore(err)); }
     });
@@ -1171,9 +1199,9 @@ async function nhanSuSheet(){
       const vai = f.querySelector("#nsVai").value;
       if(vai) data.vaiTro = vai;
       try{
-        await FS.setDoc(FS.doc(db, "qlxTaiKhoan", email), data);
-        ds.push({ email, ...data });
-        ds.sort((a,b)=>(b.vaiTro==="chu")-(a.vaiTro==="chu") || a.email.localeCompare(b.email));
+        await FS.setDoc(FS.doc(db, COL_TK, email), data);
+        ds.push({ email, ...data, _chu: vai === "chu" });
+        ds.sort((a,b)=>((b._chu?1:0)-(a._chu?1:0)) || a.email.localeCompare(b.email));
         f.remove(); ve();
       }catch(err){ alert(loiFirestore(err)); }
     };
