@@ -313,7 +313,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-9SDT6FWRR6"
 };
 
-const APP_VERSION = "2.7.0";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.8.0";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -512,6 +512,25 @@ const toVN = iso => {
   const m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
 };
+/* Ô nhập tiền: tự chấm hàng nghìn khi gõ, lưu ra số nguyên */
+const soSang = n => (n || n === 0) ? nf.format(n) : "";
+const soVe   = v => { const d = String(v||"").replace(/\D/g,""); return d === "" ? null : +d; };
+function moneyField(id, val, extra=""){
+  return `<input id="${id}" class="tienin" type="text" inputmode="numeric"
+    value="${esc(soSang(val))}" placeholder="0" ${extra}>`;
+}
+function wireMoney(root){
+  root.querySelectorAll(".tienin").forEach(i=>{
+    i.addEventListener("input", ()=>{
+      const tuPhai = i.value.length - (i.selectionStart ?? i.value.length);
+      const d = i.value.replace(/\D/g,"").slice(0,15);
+      i.value = d ? nf.format(+d) : "";
+      const vt = Math.max(0, i.value.length - tuPhai);
+      try{ i.setSelectionRange(vt, vt); }catch{}
+    });
+  });
+}
+
 function dateField(id, val){
   return `<input id="${id}" class="dateinp" type="text" inputmode="numeric" maxlength="10"
     placeholder="dd/mm/yyyy" value="${esc(toVN(val))}">`;
@@ -987,7 +1006,9 @@ async function renderFin(){
 
 /* =========================================================
    ĐĂNG NHẬP GOOGLE
-   Chỉ email có sẵn trong collection nhanVien mới vào được.
+   Chỉ email có sẵn trong collection qlxTaiKhoan mới vào được.
+   Đặt tên riêng có tiền tố qlx để khỏi đụng collection của app khác
+   khi dùng chung một project Firebase.
    ========================================================= */
 async function dangNhap(){
   const prov = new FA.GoogleAuthProvider();
@@ -1012,24 +1033,45 @@ async function dangXuat(){
   manDangNhap();
 }
 
-/* Kiểm tra email có trong danh sách được phép không */
+/* Kiểm tra email có trong danh sách được phép không.
+   Trả về { ok, me } hoặc { ok:false, ly_do } để báo đúng bệnh. */
 async function layQuyen(user){
   const email = (user.email||"").toLowerCase();
   try{
-    const d = await FS.getDoc(FS.doc(db, "nhanVien", email));
-    if(!d.exists()) return null;
-    return { email, ten: d.data().ten || user.displayName || email, anh: user.photoURL || "" };
-  }catch{ return null; }
+    const d = await FS.getDoc(FS.doc(db, "qlxTaiKhoan", email));
+    if(!d.exists())
+      return { ok:false, ly_do:
+        `Email ${email} chưa có trong danh sách được phép.\n\n` +
+        `Vào Firebase Console → Firestore → collection qlxTaiKhoan → tạo document có\n` +
+        `Document ID chính xác là:  ${email}\n` +
+        `(viết thường hết, không thừa dấu cách), thêm trường ten kiểu string.` };
+    return { ok:true, me:{ email, ten: d.data().ten || user.displayName || email,
+                           anh: user.photoURL || "", chu: d.data().vaiTro === "chu" } };
+  }catch(err){
+    const c = String(err?.code || err?.message || err);
+    if(c.includes("permission-denied"))
+      return { ok:false, ly_do:
+        `Firestore chặn không cho đọc danh sách nhân viên.\n\n` +
+        `Thường là do publish rules mới TRƯỚC khi tạo document qlxTaiKhoan/${email}.\n\n` +
+        `Cách gỡ: Firestore → Rules → tạm đổi dòng qlxTaiKhoan thành\n` +
+        `  allow read: if request.auth != null;\n` +
+        `rồi Publish, tạo document, xong trả rules về như cũ.` };
+    if(c.includes("unavailable") || c.includes("offline"))
+      return { ok:false, ly_do:"Không kết nối được Firestore. Kiểm tra mạng rồi thử lại." };
+    return { ok:false, ly_do:"Lỗi khi kiểm tra quyền.\n\n" + c };
+  }
 }
 
-function manDangNhap(msg){
+function manDangNhap(msg, email){
   app.innerHTML = `
     <div class="login">
       <div class="lgbox">
         ${LOGO}
         <h2>Quản lý xe</h2>
         <p>Đăng nhập bằng tài khoản Google đã được cấp quyền.</p>
-        ${msg ? `<div class="banner red" style="margin:0 0 14px">${esc(msg)}</div>` : ""}
+        ${msg ? `<div class="banner red" style="margin:0 0 14px;text-align:left;white-space:pre-wrap;line-height:1.5">${esc(msg)}</div>` : ""}
+        ${email ? `<div style="font-size:11.5px;color:var(--ink-3);margin:-6px 0 14px">
+          Đang thử với: <b>${esc(email)}</b></div>` : ""}
         <button class="btn" id="btnGG">
           <span style="display:inline-flex;align-items:center;gap:9px;justify-content:center">
             <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
@@ -1047,6 +1089,99 @@ function manDangNhap(msg){
   document.getElementById("btnGG").onclick = dangNhap;
 }
 
+let NHANSU = [];
+async function loadNhanSu(){
+  if(!LIVE) return NHANSU;
+  const snap = await FS.getDocs(FS.collection(db, "qlxTaiKhoan"));
+  NHANSU = snap.docs.map(d=>({ email:d.id, ...d.data() }))
+                    .sort((a,b)=>(b.vaiTro==="chu")-(a.vaiTro==="chu") || a.email.localeCompare(b.email));
+  return NHANSU;
+}
+
+async function nhanSuSheet(){
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `<header class="bar"><button class="iconbtn" id="x">✕</button>
+    <h1>Nhân viên<span class="sub">Ai được vào app</span></h1></header>
+    <div class="f"><div class="kv"><div class="r"><span class="k">Đang tải…</span></div></div></div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+
+  let ds = [];
+  try{ ds = await loadNhanSu(); }
+  catch(err){
+    el.querySelector(".f").innerHTML =
+      `<div class="banner red" style="margin:0;white-space:pre-wrap">${esc(loiFirestore(err))}</div>`;
+    return;
+  }
+
+  const ve = () => {
+    el.querySelector(".f").innerHTML = `
+      <button class="btn" id="them" style="margin-bottom:14px">＋ Thêm nhân viên</button>
+      <div class="kv">${ds.map(u=>`
+        <div class="drive">
+          <span class="dic">${u.vaiTro==="chu"?"👑":"👤"}</span>
+          <span class="dtx"><b>${esc(u.ten||u.email)}</b>
+            <span>${esc(u.email)}${u.vaiTro==="chu"?" · Chủ":""}</span></span>
+          ${u.email===ME.email
+            ? `<span style="font-size:11px;color:var(--ink-3)">bạn</span>`
+            : `<button class="iconbtn" data-xoa="${esc(u.email)}" style="color:var(--bad);font-size:15px">✕</button>`}
+        </div>`).join("")}</div>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px">
+        Chủ được thêm/xoá nhân viên. Nhân viên chỉ dùng app, không quản lý được người khác.<br>
+        Xoá ai thì lần sau họ mở app sẽ bị chặn.</div>`;
+
+    el.querySelector("#them").onclick = themNhanSu;
+    el.querySelectorAll("[data-xoa]").forEach(b=>b.onclick = async()=>{
+      const em = b.dataset.xoa;
+      if(!confirm(`Rút quyền của ${em}?`)) return;
+      try{
+        await FS.deleteDoc(FS.doc(db, "qlxTaiKhoan", em));
+        ds = ds.filter(u=>u.email!==em); ve();
+      }catch(err){ alert(loiFirestore(err)); }
+    });
+  };
+
+  function themNhanSu(){
+    const f = document.createElement("div");
+    f.className = "sheet";
+    f.style.zIndex = 70;
+    f.innerHTML = `<header class="bar"><button class="iconbtn" id="fx">✕</button>
+      <h1>Thêm nhân viên</h1></header>
+      <div class="f">
+        <div class="fg"><label>Email Google *</label>
+          <input id="nsEmail" type="email" inputmode="email" placeholder="nhanvien@gmail.com">
+          <div class="hint">Phải là email đăng nhập Google được. App tự đổi sang chữ thường.</div></div>
+        <div class="fg"><label>Tên hiển thị</label>
+          <input id="nsTen" placeholder="Nguyễn Văn A"></div>
+        <div class="fg"><label>Vai trò</label>
+          <select id="nsVai">
+            <option value="">Nhân viên — dùng app bình thường</option>
+            <option value="chu">Chủ — thêm/xoá được nhân viên</option>
+          </select></div>
+        <button class="btn" id="nsLuu">Thêm</button>
+      </div>`;
+    document.body.appendChild(f);
+    f.querySelector("#fx").onclick = ()=>f.remove();
+    f.querySelector("#nsLuu").onclick = async()=>{
+      const email = f.querySelector("#nsEmail").value.trim().toLowerCase();
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return alert("Email chưa đúng định dạng.");
+      if(ds.some(u=>u.email===email)) return alert("Email này đã có trong danh sách.");
+      const data = { ten: f.querySelector("#nsTen").value.trim() || email };
+      const vai = f.querySelector("#nsVai").value;
+      if(vai) data.vaiTro = vai;
+      try{
+        await FS.setDoc(FS.doc(db, "qlxTaiKhoan", email), data);
+        ds.push({ email, ...data });
+        ds.sort((a,b)=>(b.vaiTro==="chu")-(a.vaiTro==="chu") || a.email.localeCompare(b.email));
+        f.remove(); ve();
+      }catch(err){ alert(loiFirestore(err)); }
+    };
+  }
+
+  ve();
+}
+
 function taiKhoanSheet(){
   const el = document.createElement("div");
   el.className = "sheet";
@@ -1057,13 +1192,15 @@ function taiKhoanSheet(){
         <div class="r"><span class="k">Tên</span><span class="v">${esc(ME.ten)}</span></div>
         <div class="r"><span class="k">Email</span><span class="v mono">${esc(ME.email)}</span></div>
       </div>
-      <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:14px">
-        Muốn cấp quyền cho người khác: Firebase Console → Firestore → collection
-        <b>nhanVien</b> → thêm document, ID là email của họ, thêm trường <b>ten</b>.</div>
+      ${ME.chu ? `<button class="btn" id="ns" style="margin-bottom:12px">Quản lý nhân viên</button>`
+        : `<div style="font-size:11.5px;color:var(--ink-3);margin-bottom:14px">
+             Tài khoản nhân viên. Muốn thêm người khác thì nhờ chủ tài khoản.</div>`}
       <button class="btn danger" id="out">Đăng xuất</button>
     </div>`;
   document.body.appendChild(el);
   el.querySelector("#x").onclick = ()=>el.remove();
+  const ns = el.querySelector("#ns");
+  if(ns) ns.onclick = ()=>{ el.remove(); nhanSuSheet(); };
   el.querySelector("#out").onclick = ()=>{ el.remove(); dangXuat(); };
 }
 
@@ -1127,8 +1264,8 @@ async function renderRev(){
               ${bienHTML(v,"sm")}
               <span>${esc(v.hangXe||"")}${v.soCho?` · ${v.soCho} chỗ`:""}</span>
             </span>
-            <input class="revin" type="number" inputmode="numeric" data-v="${esc(v.id)}"
-                   value="${r===null?"":r}" placeholder="0">
+            <input class="revin tienin" type="text" inputmode="numeric" data-v="${esc(v.id)}"
+                   value="${r===null?"":soSang(r)}" placeholder="0">
           </div>`; }).join("")}</div>
         <div style="font-size:11.5px;color:var(--ink-3);margin-top:6px">
           ${n.daNhap}/${n.xe.length} xe đã nhập</div>
@@ -1158,9 +1295,10 @@ async function renderRev(){
   if(nx && !nx.disabled) nx.onclick = ()=>{ REV_M = shiftMonth(M,1); renderRev(); };
 
   // nhập tới đâu lưu tới đó
+  wireMoney(app);
   app.querySelectorAll(".revin").forEach(inp=>{
     inp.onchange = async ()=>{
-      const val = inp.value === "" ? null : +inp.value;
+      const val = soVe(inp.value);
       inp.classList.add("saving");
       try{
         await saveMonth(inp.dataset.v, { id:M, doanhThu: val===null ? 0 : val });
@@ -1175,7 +1313,7 @@ async function renderRev(){
   });
 
   function capNhatTong(){
-    const t = [...app.querySelectorAll(".revin")].reduce((s,i)=>s+(+i.value||0),0);
+    const t = [...app.querySelectorAll(".revin")].reduce((s,i)=>s+(soVe(i.value)||0),0);
     const el = app.querySelector(".stat .vl");
     if(el) el.textContent = money(t) + " đ";
   }
@@ -1310,7 +1448,7 @@ function expForm(M, e){
         <div class="hint">Gõ tên mới hoặc chọn hạng mục đã dùng lần trước.</div></div>
 
       <div class="fg"><label>Thành tiền (VNĐ) *</label>
-        <input id="exTien" type="number" inputmode="numeric" value="${e?.soTien??""}"></div>
+        ${moneyField("exTien", e?.soTien)}</div>
 
       <div class="fg"><label>Ngày chi</label>
         ${dateField("exNgay", e?.ngay || M+"-01")}</div>
@@ -1329,15 +1467,15 @@ function expForm(M, e){
         <button class="btn danger" id="exDel">Xoá khoản này</button>`}
     </div>`;
   document.body.appendChild(el);
-  wireDates(el);
+  wireDates(el); wireMoney(el);
   el.querySelector("#x").onclick = ()=>el.remove();
 
   const btn = el.querySelector("#exSave");
   btn.onclick = async()=>{
     const hangMuc = el.querySelector("#exHm").value.trim();
-    const soTien  = el.querySelector("#exTien").value;
+    const soTien  = soVe(el.querySelector("#exTien").value);
     if(!hangMuc) return alert("Nhập hạng mục đã.");
-    if(soTien === "") return alert("Nhập thành tiền đã.");
+    if(soTien === null) return alert("Nhập thành tiền đã.");
     const ngayRaw = el.querySelector("#exNgay").value.trim();
     if(ngayRaw && !toISO(ngayRaw))
       return alert("Ngày chi chưa đúng. Định dạng dd/mm/yyyy, ví dụ 05/08/2026.");
@@ -1346,7 +1484,7 @@ function expForm(M, e){
     try{
       await saveExpense(M, {
         id: e?.id || newId(),
-        hangMuc, soTien: +soTien,
+        hangMuc, soTien,
         ngay: toISO(el.querySelector("#exNgay").value),
         xe: el.querySelector("#exXe").value,
         ghiChu: el.querySelector("#exGc").value.trim()
@@ -1611,19 +1749,19 @@ function renderForm(v){
 
       <div class="fhead">Tài chính</div>
       <div class="fg"><label>Ngày mua</label>${dateField("nm",e.ngayMua)}</div>
-      ${F("gm","Giá mua (VNĐ)","number",e.giaMua)}
+      <div class="fg"><label>Giá mua (VNĐ)</label>${moneyField("gm",e.giaMua)}</div>
       <div class="fg"><label>Phương thức mua</label>
         <select id="pt">${["Trả thẳng","Trả góp","Thuê tài chính","Khác"].map(o=>
           `<option ${e.phuongThucMua===o?"selected":""}>${o}</option>`).join("")}</select></div>
-      <div class="two">${F("tt","Trả trước (VNĐ)","number",e.traTruoc)}${F("vay","Số tiền vay (VNĐ)","number",e.soTienVay)}</div>
+      <div class="two"><div class="fg"><label>Trả trước (VNĐ)</label>${moneyField("tt",e.traTruoc)}</div><div class="fg"><label>Số tiền vay (VNĐ)</label>${moneyField("vay",e.soTienVay)}</div></div>
       <div class="two">
-        ${F("tg","Trả góp mỗi tháng (VNĐ)","number",e.traGopThang,"Số cố định phải đóng hàng tháng.")}
+        <div class="fg"><label>Trả góp mỗi tháng (VNĐ)</label>${moneyField("tg",e.traGopThang)}<div class="hint">Số cố định phải đóng hàng tháng.</div></div>
         ${F("nd","Ngày đóng","number",e.ngayDong,"Ngày mấy hàng tháng (1–31).")}
       </div>
       ${F("hs","Số hồ sơ","text",e.soHoSo,"Số hồ sơ vay / hợp đồng tín dụng bên ngân hàng.")}
       <div class="two">
-        ${F("dtr","Đã trả ngân hàng (VNĐ)","number",e.daTraNganHang)}
-        ${F("dno","Dư nợ còn lại (VNĐ)","number",e.duNoConLai)}
+        <div class="fg"><label>Đã trả ngân hàng (VNĐ)</label>${moneyField("dtr",e.daTraNganHang)}</div>
+        <div class="fg"><label>Dư nợ còn lại (VNĐ)</label>${moneyField("dno",e.duNoConLai)}</div>
       </div>
       <div class="fg"><label>Cập nhật số nợ ngày</label>${dateField("ncn",e.ngayCapNhatNo)}<div class="hint">Lấy theo sao kê ngân hàng. Tự gõ, app không tính.</div></div>
 
@@ -1641,7 +1779,7 @@ function renderForm(v){
       <button class="btn ghost" id="cancel">Huỷ</button>
     </div>`;
 
-  wireDates(app);
+  wireDates(app); wireMoney(app);
   const back = ()=> v ? go("detail", v.id) : go("list");
   document.getElementById("back").onclick = back;
   document.getElementById("cancel").onclick = back;
@@ -1673,10 +1811,10 @@ function renderForm(v){
       nhaMangDinhVi:g("dvn"), linkDinhVi:g("dvl"), dinhViMoi:gd("dvm"), hetHanDinhVi:gd("dvh"),
       soPhuHieu:g("phs"), phuHieuMoi:gd("phm"), hetHanPhuHieu:gd("phh"),
       vin:g("vin"), soMay:g("sm"), caVet:g("cv"),
-      ngayMua:gd("nm"), giaMua:n("gm"), phuongThucMua:document.getElementById("pt").value,
-      traTruoc:n("tt"), soTienVay:n("vay"),
-      traGopThang:n("tg"), ngayDong:n("nd"),
-      soHoSo:g("hs"), daTraNganHang:n("dtr"), duNoConLai:n("dno"), ngayCapNhatNo:gd("ncn"),
+      ngayMua:gd("nm"), giaMua:soVe(document.getElementById("gm").value), phuongThucMua:document.getElementById("pt").value,
+      traTruoc:soVe(document.getElementById("tt").value), soTienVay:soVe(document.getElementById("vay").value),
+      traGopThang:soVe(document.getElementById("tg").value), ngayDong:n("nd"),
+      soHoSo:g("hs"), daTraNganHang:soVe(document.getElementById("dtr").value), duNoConLai:soVe(document.getElementById("dno").value), ngayCapNhatNo:gd("ncn"),
       ghiChuPhapLy:g("gc"),
       anh:g("anh").split("\n").map(s=>s.trim()).filter(Boolean)
     });
@@ -1705,12 +1843,12 @@ if(LIVE){
   FA.onAuthStateChanged(AUTH, async user=>{
     if(!user) return manDangNhap();
     const q = await layQuyen(user);
-    if(!q){
-      manDangNhap(`Tài khoản ${user.email} chưa được cấp quyền. Báo quản trị thêm email này vào danh sách nhân viên.`);
+    if(!q.ok){
+      manDangNhap(q.ly_do, user.email);
       try{ await FA.signOut(AUTH); }catch{}
       return;
     }
-    ME = q;
+    ME = q.me;
     vaoApp();
   });
 }else{
