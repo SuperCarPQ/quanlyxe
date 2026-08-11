@@ -305,6 +305,25 @@ window.__loi = function(nguon, e){
   const el = document.getElementById("app");
   if(!el) return;
   const msg = (e && (e.stack || e.message)) || String(e);
+  console.error("[" + nguon + "]", e);
+
+  // App đã vẽ xong rồi thì chỉ hiện thanh nhỏ, đừng xoá sạch màn hình
+  if(el.children.length && !document.getElementById("errbar")){
+    const b = document.createElement("div");
+    b.id = "errbar";
+    b.style.cssText = "position:fixed;left:12px;right:12px;bottom:86px;z-index:80;" +
+      "background:#D93B30;color:#fff;border-radius:12px;padding:11px 13px;font-size:12.5px;" +
+      "box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;gap:10px;align-items:flex-start";
+    b.innerHTML = '<span style="flex:1;word-break:break-word">Có lỗi nền: ' +
+      String(msg).slice(0,160).replace(/[<>&]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) +
+      '</span><button style="background:none;border:none;color:#fff;font-size:16px;' +
+      'cursor:pointer;padding:0 2px">✕</button>';
+    b.querySelector("button").onclick = ()=>b.remove();
+    document.body.appendChild(b);
+    setTimeout(()=>b.remove(), 12000);
+    return;
+  }
+
   el.innerHTML =
     '<div style="padding:24px;font-family:system-ui,sans-serif">' +
     '<h2 style="font-size:17px;margin:0 0 10px">App gặp lỗi</h2>' +
@@ -332,7 +351,7 @@ const FIREBASE_CONFIG = {
 };
 
 const COL_TK = "QuanLyTK";   // collection chứa danh sách người được vào app
-const APP_VERSION = "2.8.2";   // phải khớp với VERSION trong sw.js
+const APP_VERSION = "2.8.4";   // phải khớp với VERSION trong sw.js
 const WARN_DAYS = 14;   // báo động khi còn <= 14 ngày
 
 /* Logo — đổi chữ QLX ở đây, hoặc thay hẳn bằng <img src="logo.png" class="mark"> */
@@ -340,7 +359,9 @@ const LOGO = "<img class=\"mark\" src=\"logo-mark.png\" alt=\"Peaktime Supercar\
 
 const LIVE = !FIREBASE_CONFIG.apiKey.startsWith("DAN_");
 let db = null, FS = null, FA = null, AUTH = null;
-let ME = null;   // { email, ten, anh }
+let ME = null;          // { email, ten, anh, chu }
+let BASE_SIG = null;    // vân tay index.html lúc mở app
+let updating = false;
 
 if (LIVE) {
   try{
@@ -1087,6 +1108,67 @@ async function layQuyen(user){
   }
 }
 
+
+/* ---- Tự chẩn đoán: chạy được ở màn đăng nhập ---- */
+async function chanDoan(){
+  const L = [];
+  const ok = (t,v)=>L.push(`✓ ${t}: ${v}`);
+  const no = (t,v)=>L.push(`✗ ${t}: ${v}`);
+
+  ok("Phiên bản app", APP_VERSION);
+  ok("Tên miền", location.hostname);
+  ok("Firebase projectId", FIREBASE_CONFIG.projectId);
+  ok("authDomain", FIREBASE_CONFIG.authDomain);
+  ok("Collection tài khoản", COL_TK);
+
+  const u = AUTH?.currentUser;
+  if(u) ok("Đang đăng nhập", u.email);
+  else  no("Đang đăng nhập", "chưa — bấm nút đăng nhập trước rồi chẩn đoán lại");
+
+  if(u){
+    const em = (u.email||"").toLowerCase();
+    ok("Email dùng để tra", em);
+    try{
+      const d = await FS.getDoc(FS.doc(db, COL_TK, em));
+      if(d.exists()){
+        ok("Document " + COL_TK + "/" + em, "CÓ");
+        ok("Nội dung", JSON.stringify(d.data()));
+      }else{
+        no("Document " + COL_TK + "/" + em, "KHÔNG TỒN TẠI");
+        L.push("  → Tạo document có Document ID đúng bằng: " + em);
+        L.push("  → Kiểm tra tên collection có đúng " + COL_TK + " (phân biệt hoa thường)");
+      }
+    }catch(err){
+      no("Đọc " + COL_TK, String(err?.code || err?.message || err));
+      L.push("  → permission-denied nghĩa là Rules đang chặn. Xem mục Rules trong README.");
+    }
+    try{
+      const t = await FS.getDocs(FS.collection(db, "vehicles"));
+      ok("Đọc collection vehicles", t.size + " document");
+    }catch(err){
+      no("Đọc vehicles", String(err?.code || err?.message || err));
+    }
+  }
+
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML = `<header class="bar"><button class="iconbtn" id="x">✕</button>
+    <h1>Kết quả chẩn đoán</h1></header>
+    <div class="f">
+      <pre style="white-space:pre-wrap;word-break:break-word;background:var(--card);
+        border:1px solid var(--line);border-radius:11px;padding:13px;font-size:11.5px;
+        line-height:1.6;margin:0">${esc(L.join("\n"))}</pre>
+      <div style="height:12px"></div>
+      <button class="btn ghost" id="cp">Sao chép kết quả</button>
+    </div>`;
+  document.body.appendChild(el);
+  el.querySelector("#x").onclick = ()=>el.remove();
+  el.querySelector("#cp").onclick = async()=>{
+    try{ await navigator.clipboard.writeText(L.join("\n")); alert("Đã sao chép."); }
+    catch{ alert("Không sao chép được, ông chụp màn hình giùm."); }
+  };
+}
+
 function manDangNhap(msg, email){
   app.innerHTML = `
     <div class="login">
@@ -1108,10 +1190,12 @@ function manDangNhap(msg, email){
             Đăng nhập với Google
           </span>
         </button>
+        <button class="btn ghost" id="btnCD" style="margin-top:10px">Kiểm tra kết nối</button>
       </div>
     </div>`;
   document.getElementById("nav").classList.add("hide");
   document.getElementById("btnGG").onclick = dangNhap;
+  document.getElementById("btnCD").onclick = chanDoan;
 }
 
 let NHANSU = [];
@@ -1872,8 +1956,7 @@ if(LIVE){
     if(!user) return manDangNhap();
     const q = await layQuyen(user);
     if(!q.ok){
-      manDangNhap(q.ly_do, user.email);
-      try{ await FA.signOut(AUTH); }catch{}
+      manDangNhap(q.ly_do, user.email);   // giữ nguyên phiên để bấm "Kiểm tra kết nối" được
       return;
     }
     ME = q.me;
@@ -1883,20 +1966,9 @@ if(LIVE){
   await vaoApp();          // chế độ dữ liệu mẫu, khỏi đăng nhập
 }
 
-checkUpdate();                                        // ghi nhận vân tay lúc mở app
-setInterval(checkUpdate, 5*60*1000);                  // 5 phút dò 1 lần
-document.addEventListener("visibilitychange", ()=>{   // và mỗi lần quay lại app
-  if(!document.hidden) checkUpdate();
-});
-window.addEventListener("online", checkUpdate);
-setInterval(fireNotify, 6*60*60*1000);   // mở app lâu thì 6 tiếng kiểm lại
-
 /* ---------- Tự cập nhật khi có bản mới ----------
    Không dựa vào số version nữa. App tự so dấu vân tay của index.html
    trên máy chủ (ETag / Last-Modified) với lúc mở app. Khác nhau = có bản mới. */
-let BASE_SIG = null;
-let updating = false;
-
 async function fileSig(){
   const url = "index.html?_=" + Date.now();
   try{
@@ -1976,6 +2048,15 @@ if("serviceWorker" in navigator){
     location.reload();
   });
 }
+
+/* Chạy cuối cùng, sau khi mọi hàm và biến đã sẵn sàng */
+checkUpdate();                                        // ghi nhận vân tay lúc mở app
+setInterval(checkUpdate, 5*60*1000);                  // 5 phút dò 1 lần
+document.addEventListener("visibilitychange", ()=>{
+  if(!document.hidden) checkUpdate();
+});
+window.addEventListener("online", checkUpdate);
+setInterval(fireNotify, 6*60*60*1000);
 </script>
 </body>
 </html>
